@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "visio",
+  "version": "0.1.0",
+  "identifier": "app.visio.desktop",
+  "build": {
+    "beforeDevCommand": "cd .. && npm run dev -w web",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "cd .. && npm run build -w web",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "visio",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 940,
+        "minHeight": 620,
+        "additionalBrowserArgs": "--enable-gpu-rasterization --enable-zero-copy --ignore-gpu-blocklist"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "dmg"],
+    "icon": ["icons/icon.ico", "icons/icon.icns", "icons/icon.png"]
+  }
+}
