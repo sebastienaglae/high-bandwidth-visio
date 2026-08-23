@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Builds & outputs
+dist/
+**/dist/
+out/
+build/
+
+# Rust / Tauri
+desktop/src-tauri/target/
+desktop/src-tauri/gen/schemas/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Logs & temp files
+*.log
+*.err.log
+logs/
+tmp/
+
+# Test artifacts & coverage
+coverage/
+.nyc_output/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Misc
+*.local
+*.tsbuildinfo

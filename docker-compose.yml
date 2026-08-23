@@ -1,0 +1,48 @@
+services:
+  visio-server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    environment:
+      PORT: "9090"
+      LISTEN_IP: "0.0.0.0"
+      # Public IPv4 of the VPS - advertised to WebRTC clients.
+      ANNOUNCED_IP: ${ANNOUNCED_IP:?set ANNOUNCED_IP in .env}
+      RTC_MIN_PORT: "40000"
+      RTC_MAX_PORT: "40100"
+    expose:
+      - "9090"
+    ports:
+      - "40000-40100:40000-40100/udp"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9090/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  visio-web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # e.g. visio.example.com for auto-TLS, or ":80" for plain HTTP testing.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - visio-server
