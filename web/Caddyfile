@@ -1,0 +1,18 @@
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# Signaling WebSocket + API endpoints -> SFU server
+	handle /ws {
+		reverse_proxy visio-server:9090
+	}
+	handle /api/* {
+		reverse_proxy visio-server:9090
+	}
+
+	# Static SPA
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
