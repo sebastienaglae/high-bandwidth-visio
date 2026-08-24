@@ -1,0 +1,26 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
+const ctx = await browser.newContext({ locale: "en-US", permissions: ["microphone", "camera"] });
+const page = await ctx.newPage();
+page.on("pageerror", (e) => console.log("[pageerror]", String(e).slice(0, 200)));
+await page.goto("http://localhost:5173/j/debug-room8-aaaaaaaaaaaaaaa?debug", { waitUntil: "networkidle" });
+await page.getByPlaceholder("Your name").fill("Solo");
+await page.getByRole("button", { name: "Join room" }).click();
+await page.waitForSelector(".grid .tile");
+console.log("boards:", await page.evaluate(() => document.querySelectorAll(".board-canvas").length));
+await page.locator('button[title="Whiteboard"]').click();
+await page.waitForTimeout(600);
+const box = await page.locator(".board-canvas").boundingBox();
+await page.mouse.move(box.x + 0.2 * box.width, box.y + 0.5 * box.height);
+await page.mouse.down();
+await page.mouse.move(box.x + 0.5 * box.width, box.y + 0.3 * box.height, { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(400);
+const r = await page.evaluate(() => {
+  const c = document.querySelector(".board-canvas");
+  const ctx2 = c.getContext("2d");
+  const mid = ctx2.getImageData(Math.round(0.35 * c.width), Math.round(0.4 * c.height), 1, 1).data;
+  return { h: window.__board.history.length, px: [mid[0], mid[1], mid[2]], cw: c.width, ch: c.height, boards: document.querySelectorAll(".board-canvas").length };
+});
+console.log(JSON.stringify(r));
+await browser.close();

@@ -23,6 +23,17 @@ like Nice–Osaka).
 - Adaptive jitter buffers, FEC and congestion control tuned per mode
 - Native desktop app for Windows & macOS ([Tauri v2](https://v2.tauri.app))
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Home](docs/screenshots/landing-light.png) | ![Live room](docs/screenshots/room.png) |
+| *Home — create or join with a link* | *Live room — two participants, chat, quality modes* |
+| ![Whiteboard](docs/screenshots/whiteboard.png) | ![Network diagnostics](docs/screenshots/network.png) |
+| *Collaborative whiteboard* | *Network panel — RTT, throughput, traceroute* |
+| ![Pre-join](docs/screenshots/prejoin.png) | ![Dark mode](docs/screenshots/landing-dark.png) |
+| *Pre-join device check* | *Dark theme* |
+
 ## Structure
 
 | Path | What |
