@@ -579,6 +579,40 @@ input:focus { border-color: var(--accent); }
 
 .chat-input-row { margin-top: auto; }
 
+.side-panel.dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}
+
+.transfer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  padding-right: 22px;
+}
+.transfer .transfer-label {
+  font-size: 11.5px;
+}
+.transfer .transfer-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  overflow: hidden;
+}
+.transfer .transfer-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.15s ease;
+}
+.transfer button {
+  position: absolute;
+  right: 2px;
+  top: 4px;
+}
+
 /* ---------- Whiteboard ---------- */
 
 .board-overlay {

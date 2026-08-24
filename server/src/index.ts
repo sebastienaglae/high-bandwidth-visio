@@ -5,6 +5,8 @@ import { handleConnection } from "./signaling.js";
 import { randomRoomToken } from "./ids.js";
 import { RateLimiter } from "./ratelimit.js";
 import { buildIceServers } from "./ice.js";
+import { formatPrometheus } from "./metrics.js";
+import { globalStats } from "./rooms.js";
 
 // ---- Boot validation ----
 if (config.isProd && config.listenIp === "0.0.0.0" && !config.announcedIp) {
@@ -54,6 +56,25 @@ const server = http.createServer((req, res) => {
   if (req.url === "/api/rtc-config") {
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
     res.end(JSON.stringify({ iceServers: buildIceServers() }));
+    return;
+  }
+  if (req.url?.startsWith("/metrics")) {
+    // Optional protection: set METRICS_TOKEN and request /metrics?token=...
+    const expected = process.env.METRICS_TOKEN;
+    if (expected) {
+      const given = new URL(req.url, "http://x").searchParams.get("token");
+      if (given !== expected) {
+        res.writeHead(403).end();
+        return;
+      }
+    }
+    const mem = process.memoryUsage();
+    const body = formatPrometheus(globalStats(), {
+      uptimeSec: process.uptime(),
+      heapBytes: mem.heapUsed,
+    });
+    res.writeHead(200, { "content-type": "text/plain; version=0.0.4" });
+    res.end(body);
     return;
   }
   if (req.method === "GET" && req.url?.startsWith("/api/speedtest")) {

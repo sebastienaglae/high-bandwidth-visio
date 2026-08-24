@@ -128,6 +128,30 @@ export class Room {
     return this.peers.size === 0;
   }
 
+  stats(): {
+    peers: number;
+    producers: number;
+    consumers: number;
+    dataProducers: number;
+    locked: boolean;
+  } {
+    let producers = 0;
+    let consumers = 0;
+    let dataProducers = 0;
+    for (const p of this.peers.values()) {
+      producers += p.producers.size;
+      consumers += p.consumers.size;
+      dataProducers += p.dataProducers.size;
+    }
+    return {
+      peers: this.peers.size,
+      producers,
+      consumers,
+      dataProducers,
+      locked: this.locked,
+    };
+  }
+
   broadcast(message: unknown, exceptPeerId?: string): void {
     const data = JSON.stringify(message);
     for (const peer of this.peers.values()) {
@@ -205,6 +229,45 @@ export function findDisconnectedPeer(
     if (peer && peer.disconnected) return { peer, room };
   }
   return undefined;
+}
+
+export interface GlobalStats {
+  rooms: number;
+  peers: number;
+  producers: number;
+  consumers: number;
+  dataProducers: number;
+  workers: number;
+  lockedRooms: number;
+  perRoom: { id: string; peers: number; locked: boolean }[];
+}
+
+export function globalStats(): GlobalStats {
+  let peers = 0;
+  let producers = 0;
+  let consumers = 0;
+  let dataProducers = 0;
+  let lockedRooms = 0;
+  const perRoom: GlobalStats["perRoom"] = [];
+  for (const room of rooms.values()) {
+    const s = room.stats();
+    peers += s.peers;
+    producers += s.producers;
+    consumers += s.consumers;
+    dataProducers += s.dataProducers;
+    if (s.locked) lockedRooms++;
+    perRoom.push({ id: room.id, peers: s.peers, locked: s.locked });
+  }
+  return {
+    rooms: rooms.size,
+    peers,
+    producers,
+    consumers,
+    dataProducers,
+    workers: workers.length,
+    lockedRooms,
+    perRoom,
+  };
 }
 
 /**

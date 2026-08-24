@@ -64,6 +64,10 @@ const PATHS: Record<string, string> = {
     '<path d="M8 11V7a4 4 0 0 1 7.5-1.9"/>',
   star:
     '<path d="m12 3 2.7 5.6 6.3.9-4.5 4.4 1 6.1-5.5-2.9-5.5 2.9 1-6.1L3 9.5l6.3-.9L12 3z"/>',
+  record:
+    '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/>',
+  stop:
+    '<rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none"/>',
 };
 
 export function icon(name: keyof typeof PATHS | string, size = 18): SVGSVGElement {

@@ -62,6 +62,12 @@ Every user-facing surface in visio, with the features it carries.
 - Active-speaker highlighting (server audio-level observer → tile outline)
 - Per-tile connection quality (good/mid/low from inbound RTP loss & jitter)
 
+### Recording & shortcuts
+- Local meeting recording (camera + mic → WebM), auto-downloaded and offered in chat
+- Keyboard shortcuts: m toggles microphone,  toggles camera (ignored while typing)
+- File transfers show live progress bars, can be cancelled by the sender, and
+  files can be dragged onto the chat panel
+
 ### Errors
 - Styled failure screen ("Could not join" + reason) instead of a dead page
 
@@ -87,4 +93,5 @@ Every user-facing surface in visio, with the features it carries.
 - Ephemeral rooms (closed when last participant leaves)
 - Rate limiting (60 signaling msg/s per connection, per-IP HTTP limits), capacity caps, security headers, graceful shutdown, production boot guard
 - `/healthz`, `/api/new-room`, `/api/speedtest`
+
 

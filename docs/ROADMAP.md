@@ -10,7 +10,7 @@ would be natural next milestones.
 - [ ] AV1 encode path + SVC (L3T3_KEY) end-to-end; codec preference UI
 - [ ] Active-speaker detection (audio-level observer) + spotlight layout
 - [ ] Layout modes: grid / speaker / filmstrip; pin & mute-others (host)
-- [ ] Local recording (MediaRecorder) and server-side recording
+- [x] Local recording (MediaRecorder → WebM download + chat chip) — server-side recording still open
 - [ ] RTMP/streaming output for webinars
 - [ ] Hi-fi audio mode: 5.1 Opus, no DTX, full-band stereo music
 - [ ] Live captions (local Whisper wasm or WebSpeech) per language
@@ -28,8 +28,7 @@ would be natural next milestones.
 
 ## Chat, files, whiteboard
 
-- [ ] File transfer: progress bars, cancel, size cap negotiation, drag & drop,
-      image paste with inline preview
+- [x] File transfer progress bars, cancel, drag & drop (size cap via MAX_PEERS-style env is future work; image paste/preview pending)
 - [ ] Markdown rendering in chat (code blocks especially)
 - [ ] Whiteboard: shapes, text, eraser, undo/redo, multi-page, PNG/PDF export
 - [ ] Whiteboard "laser pointer" mode and follow-the-presenter view
@@ -65,18 +64,18 @@ would be natural next milestones.
 ## Operations
 
 - [x] CI: GitHub Actions — typecheck, tests, web build, Docker image builds
-- [ ] Prometheus `/metrics` (rooms, peers, bitrates, worker CPU) + Grafana board
+- [x] Prometheus `/metrics` (rooms, peers, producers, consumers, locks, workers, uptime, heap; optional METRICS_TOKEN) — Grafana board still open
 - [ ] Structured logging (pino) with levels + request IDs
 - [ ] Load harness: headless bot participants publishing fake media
 - [ ] Backup/restore notes for long-lived rooms (currently ephemeral by design)
 
 ## Client polish
 
-- [ ] Keyboard accessibility pass: focus trap in panels, shortcuts
-      (m to mute, etc.), ARIA live regions for chat
+- [ ] Keyboard accessibility pass: focus trap in panels, ARIA live regions for chat (m/v mute/cam shortcuts done)
 - [ ] Mobile/responsive layout + PWA manifest (installable, wakelock)
 - [ ] OpenGraph preview image on invite links (server-rendered meta)
 - [ ] More languages; RTL support; i18n for server-generated strings
 - [ ] Sound: join/leave chimes, mute-state audio cues
 - [ ] Connection-quality indicator per tile (from consumer score)
+
 

@@ -602,6 +602,7 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   const netBtn = iconControl("activity", "activity", t("netDiagnostics"), false);
   const lockBtn = iconControl("lock", "unlock", t("lockRoom"), false);
   lockBtn.classList.add("hidden"); // guests never see it
+  const recBtn = iconControl("record", "stop", t("record"), false);
   const leaveBtn = iconControl("leave", "leave", t("leave"), false, "danger");
   const roomMain = el("main", { class: "room" });
 
@@ -663,6 +664,58 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     lockBtn.title = locking ? t("unlockRoom") : t("lockRoom");
   };
 
+  // ---- Local recording (camera + mic → WebM download) ----
+  let recorder: MediaRecorder | null = null;
+  let recChunks: Blob[] = [];
+  recBtn.onclick = () => {
+    if (recorder) {
+      recorder.stop();
+      return;
+    }
+    if (!localStream || localStream.getTracks().length === 0) return;
+    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+      ? "video/webm;codecs=vp9,opus"
+      : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+        ? "video/webm;codecs=vp8,opus"
+        : "video/webm";
+    try {
+      recorder = new MediaRecorder(localStream, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+    } catch (e) {
+      console.warn("recorder unavailable:", e);
+      return;
+    }
+    recChunks = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recChunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(recChunks, { type: "video/webm" });
+      recChunks = [];
+      recorder = null;
+      setIconControl(recBtn, false, "record");
+      if (blob.size === 0) return;
+      const url = URL.createObjectURL(blob);
+      const name = `visio-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      chat.addDownload(name, url, chatFmtSize(blob.size));
+      chat.system(t("recordingSaved"));
+    };
+    recorder.start(1000);
+    setIconControl(recBtn, true, "record");
+  };
+
+  // ---- Keyboard shortcuts (ignored while typing) ----
+  window.addEventListener("keydown", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "m" || e.key === "M") micBtn.click();
+    else if (e.key === "v" || e.key === "V") camBtn.click();
+  });
+
   const chat = buildChatPanel(client, displayName, peerNames, () => {
     setIconControl(chatBtn, false, "chat");
   });
@@ -705,7 +758,7 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     el("footer", { class: "controls" },
       modeBar,
       el("div", { class: "controls-group" },
-        micBtn, camBtn, screenBtn, chatBtn, boardBtn, copyBtn, netBtn, lockBtn,
+        micBtn, camBtn, screenBtn, recBtn, chatBtn, boardBtn, copyBtn, netBtn, lockBtn,
         themeToggleButton(),
         leaveBtn
       )
@@ -727,14 +780,17 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   client.startQualityPolling();
 }
 
+function chatFmtSize(n: number): string {
+  return n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} kB`;
+}
+
 function iconControl(
   onIcon: string,
   offIcon: string,
   label: string,
   initialOn: boolean,
   extraClass?: string
-): HTMLButtonElement {
-  const btn = el("button", {
+): HTMLButtonElement {  const btn = el("button", {
     class: `control${extraClass ? ` ${extraClass}` : ""}`,
     title: label,
     "aria-label": label,
@@ -766,7 +822,11 @@ function buildChatPanel(
   displayName: string,
   peerNames: Map<string, string>,
   onClose: () => void
-): { root: HTMLElement; system: (text: string) => void } {
+): {
+  root: HTMLElement;
+  system: (text: string) => void;
+  addDownload: (name: string, url: string, sizeLabel: string) => void;
+} {
   const root = el("aside", { class: "side-panel chat-panel hidden" });
   const messages = el("div", { class: "chat-messages" });
   const input = el("input", { type: "text", placeholder: t("chatPlaceholder"), maxlength: "2000" });
@@ -803,13 +863,76 @@ function buildChatPanel(
     fileInput.value = "";
   };
 
+  // Drag & drop onto the chat panel.
+  root.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    root.classList.add("dragging");
+  });
+  root.addEventListener("dragleave", () => root.classList.remove("dragging"));
+  root.addEventListener("drop", (e) => {
+    e.preventDefault();
+    root.classList.remove("dragging");
+    for (const file of Array.from(e.dataTransfer?.files ?? [])) {
+      void sendFile(file);
+    }
+  });
+
+  // ---- Transfer progress rows ----
+  interface TransferRow {
+    row: HTMLElement;
+    set: (pct: number) => void;
+    finish: () => void;
+    remove: () => void;
+  }
+  const transferRows = new Map<string, TransferRow>();
+
+  function progressRow(name: string, id: string, cancellable: boolean): TransferRow {
+    const fill = el("div", { class: "transfer-fill" });
+    const bar = el("div", { class: "transfer-bar" }, fill);
+    const label = el("span", { class: "transfer-label" }, `${name} · 0%`);
+    const row = el("div", { class: "msg system transfer" }, label, bar);
+    const tr: TransferRow = {
+      row,
+      set: (pct) => {
+        fill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+        label.textContent = `${name} · ${Math.round(pct)}%`;
+      },
+      finish: () => {
+        fill.style.width = "100%";
+        row.remove();
+      },
+      remove: () => row.remove(),
+    };
+    if (cancellable) {
+      const x = el("button", { class: "label-btn", title: t("cancelTransfer"), "aria-label": t("cancelTransfer") });
+      x.replaceChildren(icon("x", 12));
+      x.onclick = () => {
+        client.sendApp(JSON.stringify({ t: "fcancel", id }));
+        cancelledSends.add(id);
+        tr.remove();
+        addSystem(`${name} — ${t("transferCancelled")}`);
+      };
+      row.append(x);
+    }
+    addLine(row);
+    transferRows.set(id, tr);
+    return tr;
+  }
+
+  const cancelledSends = new Set<string>();
+
   async function sendFile(file: File): Promise<void> {
     const id = crypto.randomUUID();
-    addSystem(`${displayName} ${t("fileArrives")}: ${file.name}`);
+    const tr = progressRow(file.name, id, true);
     client.sendApp(JSON.stringify({ t: "fmeta", id, name: file.name, size: file.size, mime: file.type }));
     const CHUNK = 60 * 1024;
     let seq = 0;
     for (let offset = 0; offset < file.size; offset += CHUNK) {
+      if (cancelledSends.has(id)) {
+        cancelledSends.delete(id);
+        transferRows.delete(id);
+        return;
+      }
       const slice = new Uint8Array(await file.slice(offset, offset + CHUNK).arrayBuffer());
       const frame = new Uint8Array(1 + 36 + 4 + slice.length);
       frame[0] = FILE_TAG;
@@ -821,8 +944,11 @@ function buildChatPanel(
       }
       client.sendApp(frame.buffer);
       seq++;
+      tr.set((offset + slice.length) / Math.max(1, file.size) * 100);
     }
     client.sendApp(JSON.stringify({ t: "fend", id }));
+    tr.finish();
+    transferRows.delete(id);
   }
 
   function downloadChip(name: string, blobUrl: string, sizeLabel: string): HTMLElement {
@@ -850,7 +976,9 @@ function buildChatPanel(
 
   function addSystem(text: string): void {
     addLine(el("div", { class: "msg system" }, el("span", {}, text)));
-  }  const incomingFiles = new Map<string, FileIncoming>();
+  }
+
+  const incomingFiles = new Map<string, FileIncoming>();
 
   client.onAppMessage = (peerId, data) => {
     const name = peerNames.get(peerId) ?? t("guest");
@@ -870,14 +998,22 @@ function buildChatPanel(
           chunks: [],
           received: 0,
         });
-        addSystem(`${name}: ${env.name ?? ""} — ${t("receivingFile")}…`);
+        progressRow(`${name}: ${env.name ?? ""}`, env.id, false);
       } else if (env.t === "fend" && env.id) {
         const f = incomingFiles.get(env.id);
+        const tr = transferRows.get(env.id);
         if (!f) return;
         const blob = new Blob(f.chunks as BlobPart[]);
         const url = URL.createObjectURL(blob);
         incomingFiles.delete(env.id);
+        tr?.finish();
+        transferRows.delete(env.id);
         addLine(downloadChip(f.name, url, fmtSize(blob.size)));
+      } else if (env.t === "fcancel" && env.id) {
+        incomingFiles.delete(env.id);
+        transferRows.get(env.id)?.remove();
+        transferRows.delete(env.id);
+        addSystem(`${name}: ${t("transferCancelled")}`);
       }
       return;
     }
@@ -890,9 +1026,14 @@ function buildChatPanel(
     const payload = buf.subarray(41);
     f.chunks.push(payload);
     f.received += payload.length;
+    transferRows.get(id)?.set((f.received / Math.max(1, f.size)) * 100);
   };
 
-  return { root, system: addSystem };
+  return {
+    root,
+    system: addSystem,
+    addDownload: (name: string, url: string, sizeLabel: string) => addLine(downloadChip(name, url, sizeLabel)),
+  };
 }
 
 // ---------- Whiteboard ----------
