@@ -101,6 +101,7 @@ async function handleMessage(
         iceParameters: transport.iceParameters,
         iceCandidates: transport.iceCandidates,
         dtlsParameters: transport.dtlsParameters,
+        sctpParameters: transport.sctpParameters,
       });
       break;
     }

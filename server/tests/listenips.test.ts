@@ -20,11 +20,11 @@ afterEach(() => {
 });
 
 describe("resolveListenIps", () => {
-  it("dev loopback: binds 127.0.0.1 and announces primary NIC for LAN access", async () => {
+  it("dev loopback: binds 127.0.0.1 and announces nothing (loopback candidate only)", async () => {
     const ips = await loadWithEnv({ LISTEN_IP: "127.0.0.1" });
     expect(ips[0].ip).toBe("127.0.0.1");
-    expect(ips[0].announcedIp).toBeDefined();
-    expect(ips[0].announcedIp).not.toBe("127.0.0.1");
+    // Announcing a non-bound IP (e.g. the LAN NIC) breaks ICE — must be undefined.
+    expect(ips[0].announcedIp).toBeUndefined();
   });
 
   it("wildcard bind without ANNOUNCED_IP falls back to primary NIC", async () => {

@@ -141,18 +141,23 @@ export function closeRoomIfEmpty(roomId: string): void {
 /**
  * Resolve the bind IP + announced IP for WebRTC transports.
  * - ANNOUNCED_IP env wins when set (production behind NAT/Docker).
- * - 127.0.0.1 dev: bind loopback, announce the primary NIC for LAN testing.
+ * - Loopback dev: bind 127.0.0.1, announce nothing (same-host browsers reach
+ *   the loopback candidate; for LAN testing set LISTEN_IP to the LAN IP).
  * - 0.0.0.0: mediasoup needs a concrete interface; use primary NIC.
+ * The announced IP must always be an IP we actually listen on.
  */
 export function resolveListenIps(): TransportListenIp[] {
   let bind = config.listenIp;
   let announce = config.announcedIp;
 
   if (!announce) {
-    if (listenIpIsLoopback(bind)) announce = config.primaryInterfaceIp();
-    else if (!isUnspecified(bind)) announce = bind;
-    // unspecified + no ANNOUNCED_IP: leave undefined; mediasoup will use mDNS
-    // candidates which only work on localhost - config validation warns at boot.
+    if (listenIpIsLoopback(bind)) {
+      announce = undefined; // never advertise an IP we are not bound to
+    } else if (!isUnspecified(bind)) {
+      announce = bind;
+    }
+    // unspecified + no ANNOUNCED_IP: leave undefined; config validation
+    // refuses this combination in production.
   }
 
   if (isUnspecified(bind)) {

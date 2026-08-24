@@ -29,6 +29,13 @@ export type TransportOptions = {
   iceParameters: IceParameters;
   iceCandidates: IceCandidate[];
   dtlsParameters: DtlsParameters;
+  /** Present when the transport was created with SCTP enabled. */
+  sctpParameters?: {
+    port: number;
+    OS: number;
+    MIS: number;
+    maxMessageSize: number;
+  };
 };
 
 export interface AppData {

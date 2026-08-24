@@ -44,6 +44,8 @@ export class RoomClient {
   localStream: MediaStream | null = null;
   /** Set once join() succeeds. */
   peerId = "";
+  /** Our public IP as seen by the server (from the welcome push). */
+  clientIp = "";
 
   onRemoteStream: ((s: RemoteStream, added: boolean) => void) | null = null;
   onRemoteStreamRemoved:
@@ -94,13 +96,14 @@ export class RoomClient {
   private async createTransport(direction: "send" | "recv"): Promise<types.Transport> {
     const params = (await this.signal.request("createWebRtcTransport", {
       direction,
-    })) as unknown as TransportOptions;
+    })) as unknown as TransportOptions & { sctpParameters?: unknown };
 
     const options: types.TransportOptions = {
       id: params.id,
       iceParameters: params.iceParameters as never,
       iceCandidates: params.iceCandidates as never,
       dtlsParameters: params.dtlsParameters as never,
+      sctpParameters: params.sctpParameters as never,
     };
 
     const transport =
@@ -120,6 +123,12 @@ export class RoomClient {
         this.signal
           .request("produce", { transportId: transport.id, kind, rtpParameters, appData })
           .then(({ producerId }) => callback({ id: String(producerId) }))
+          .catch(errback);
+      });
+      transport.on("producedata", ({ label, protocol, appData }, callback, errback) => {
+        this.signal
+          .request("produceData", { transportId: transport.id, label, protocol })
+          .then(({ id }) => callback({ id: String(id) }))
           .catch(errback);
       });
     }
@@ -368,6 +377,9 @@ export class RoomClient {
 
   private handlePush(push: import("@visio/shared").ServerResponse): void {
     switch (push.type) {
+      case "welcome":
+        this.clientIp = push.clientIp;
+        break;
       case "newPeer":
         this.onPeerJoined?.(push.peer.peerId, push.peer.displayName);
         break;

@@ -332,6 +332,10 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
 
   const peerNames = new Map<string, string>();
   const client = new RoomClient(wsUrl("/ws"), roomId, displayName);
+  // Debug hook: append ?debug to inspect transports/consumers from the console.
+  if (new URLSearchParams(location.search).has("debug")) {
+    (window as unknown as { __room: RoomClient }).__room = client;
+  }
 
   client.onRemoteStream = (s: RemoteStream) => {
     const isSelf = s.peerId === client.peerId;
@@ -756,6 +760,7 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
 
   const clearBtn = el("button", { class: "control small", title: t("boardClear") }, icon("trash", 15));
   clearBtn.onclick = () => {
+    history.length = 0;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     strokes.clear();
     void client.signal.request("wbClear");
@@ -773,6 +778,11 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
     if (rect.width > 0) {
       canvas.width = Math.round(rect.width * devicePixelRatio);
       canvas.height = Math.round(rect.height * devicePixelRatio);
+      // Resizing clears the bitmap — replay the full history, then restore
+      // the stroke currently being drawn.
+      strokes.clear();
+      for (const op of history) applyOp(op);
+      if (drawing) strokes.set(drawingId, drawing);
     }
   }
   new ResizeObserver(resize).observe(canvas);
@@ -783,6 +793,7 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
     points: number[];
   }
   const strokes = new Map<string, LiveStroke>();
+  const history: WBOp[] = [];
 
   function drawSegment(pts: number[], strokeColor: string, w: number): void {
     if (pts.length < 4) return;
@@ -798,22 +809,28 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
     ctx.stroke();
   }
 
+  function applyOp(op: WBOp): void {
+    if (op.k === "clear") {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      strokes.clear();
+    } else if (op.k === "start") {
+      strokes.set(op.s.id, { color: op.s.color, width: op.s.width, points: [...op.pts] });
+      drawSegment(op.pts, op.s.color, op.s.width);
+    } else if (op.k === "pts") {
+      const s = strokes.get(op.id);
+      if (!s) return;
+      drawSegment([...s.points.slice(-2), ...op.pts], s.color, s.width);
+      s.points.push(...op.pts);
+    } else if (op.k === "end") {
+      strokes.delete(op.id);
+    }
+  }
+
   function applyOps(ops: WBOp[]): void {
     for (const op of ops) {
-      if (op.k === "clear") {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        strokes.clear();
-      } else if (op.k === "start") {
-        strokes.set(op.s.id, { color: op.s.color, width: op.s.width, points: [...op.pts] });
-        drawSegment(op.pts, op.s.color, op.s.width);
-      } else if (op.k === "pts") {
-        const s = strokes.get(op.id);
-        if (!s) continue;
-        drawSegment([...s.points.slice(-2), ...op.pts], s.color, s.width);
-        s.points.push(...op.pts);
-      } else if (op.k === "end") {
-        strokes.delete(op.id);
-      }
+      history.push(op);
+      if (history.length > 4000) history.splice(0, history.length - 4000);
+      applyOp(op);
     }
   }
   client.onWbOps = applyOps;
@@ -822,6 +839,7 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
   let drawing: LiveStroke | null = null;
   let drawingId = "";
   let pendingPts: number[] = [];
+  let startSent = false;
   let flushTimer = 0;
 
   function toLocal(e: PointerEvent): [number, number] {
@@ -835,6 +853,7 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
     const [x, y] = toLocal(e);
     drawing = { color, width, points: [x, y] };
     pendingPts = [x, y];
+    startSent = false;
     strokes.set(drawingId, drawing);
     drawSegment([x, y, x + 0.0001, y], color, width);
   });
@@ -850,10 +869,16 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
 
   function flush(): void {
     if (!drawing || pendingPts.length === 0) return;
-    const first = strokes.get(drawingId) === drawing && pendingPts.length === drawing.points.length
-      ? [{ k: "start" as const, s: { id: drawingId, color: drawing.color, width: drawing.width }, pts: pendingPts }]
-      : [{ k: "pts" as const, id: drawingId, pts: pendingPts }];
-    void client.signal.request("wbOp", { ops: first });
+    let ops;
+    if (!startSent) {
+      // The replay history must begin with a "start" op for this stroke.
+      ops = [{ k: "start" as const, s: { id: drawingId, color: drawing.color, width: drawing.width }, pts: pendingPts }];
+      startSent = true;
+    } else {
+      ops = [{ k: "pts" as const, id: drawingId, pts: pendingPts }];
+    }
+    history.push(...ops);
+    void client.signal.request("wbOp", { ops });
     pendingPts = [];
   }
 
@@ -862,7 +887,9 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
   canvas.addEventListener("pointerup", () => {
     flush();
     if (drawing) {
-      void client.signal.request("wbOp", { ops: [{ k: "end", id: drawingId }] });
+      const end = { k: "end" as const, id: drawingId };
+      history.push(end);
+      void client.signal.request("wbOp", { ops: [end] });
       drawing = null;
       pendingPts = [];
     }
@@ -871,6 +898,17 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
     drawing = null;
     pendingPts = [];
   });
+
+  if (new URLSearchParams(location.search).has("debug")) {
+    (window as unknown as { __board: object }).__board = {
+      get history() {
+        return history;
+      },
+      get strokes() {
+        return [...strokes.keys()];
+      },
+    };
+  }
 
   return { overlay };
 }

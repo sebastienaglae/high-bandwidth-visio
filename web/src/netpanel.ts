@@ -30,6 +30,7 @@ export class NetPanel {
     this.root = document.createElement("aside");
     this.root.className = "net-panel";
     this.render();
+    this.clientIp = this.client.clientIp || "…";
     this.client.signal.onPush((push) => {
       if (push.type === "welcome") {
         this.clientIp = push.clientIp;
@@ -41,6 +42,8 @@ export class NetPanel {
       }
     });
     this.startLoops();
+    // Show the path as soon as the panel opens.
+    void this.trace();
   }
 
   get element(): HTMLElement {
@@ -82,7 +85,7 @@ export class NetPanel {
 
     this.root.append(
       header(t("netTitle")),
-      row(t("yourIp"), `${this.clientIp}`),
+      row(t("yourIp"), this.clientIp),
       this.canvas,
       this.mediaStats,
       rowButtons(traceBtn, watchBtn, speedBtn),
@@ -221,9 +224,16 @@ export class NetPanel {
       let lost = 0;
       let rttMs: number | null = null;
 
+      const eachStat = (report: unknown, fn: (s: Record<string, unknown>) => void): void => {
+        if (!report) return;
+        if (report instanceof Map) report.forEach(fn as never);
+        else if (typeof (report as { forEach?: unknown }).forEach === "function") {
+          (report as { forEach: (f: (s: unknown) => void) => void }).forEach(fn as never);
+        }
+      };
+
       for (const report of [stats.send, stats.recv]) {
-        if (!(report instanceof Map)) continue;
-        for (const s of report.values() as IterableIterator<Record<string, unknown>>) {
+        eachStat(report, (s) => {
           const type = s.type as string;
           if (type === "outbound-rtp" && typeof s.bytesSent === "number" && !s.isRemote) {
             sendBytes += s.bytesSent as number;
@@ -243,7 +253,7 @@ export class NetPanel {
           ) {
             rttMs = (s.currentRoundTripTime as number) * 1000;
           }
-        }
+        });
       }
 
       const upBps = dt > 0 ? ((sendBytes - this.lastSendBytes) * 8) / dt : 0;
@@ -254,7 +264,7 @@ export class NetPanel {
       const fmt = (bps: number) => (bps >= 1e6 ? `${(bps / 1e6).toFixed(1)} Mbps` : `${(bps / 1e3).toFixed(0)} kbps`);
       this.mediaStats.dataset.up = fmt(upBps);
       this.mediaStats.dataset.down = fmt(downBps);
-      this.mediaStats.dataset.rtt = rttMs !== null ? `${rttMs.toFixed(0)} ms` : "–";
+      this.mediaStats.dataset.rtt = rttMs === null ? "–" : `${(rttMs as number).toFixed(0)} ms`;
       this.mediaStats.dataset.jitter = jitterN ? `${((jitterSum / jitterN) * 1000).toFixed(1)} ms` : "–";
       this.mediaStats.dataset.lost = String(lost);
       this.renderMediaStatsLine();
