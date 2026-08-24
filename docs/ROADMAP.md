@@ -14,7 +14,7 @@ would be natural next milestones.
 - [ ] RTMP/streaming output for webinars
 - [ ] Hi-fi audio mode: 5.1 Opus, no DTX, full-band stereo music
 - [ ] Live captions (local Whisper wasm or WebSpeech) per language
-- [ ] E2EE via Insertable Streams (SFU stays key-blind)
+- [x] E2EE via Insertable Streams (SFU stays key-blind; key = room token)
 - [ ] Reactions & raise-hand (data channel, no emoji in chrome — in-tile badges)
 
 ## Connection & resilience
@@ -77,6 +77,7 @@ would be natural next milestones.
 - [ ] More languages; RTL support; i18n for server-generated strings
 - [x] Sound: join/leave chimes, mute-state audio cues (WebAudio, no assets)
 - [ ] Connection-quality indicator per tile (from consumer score)
+
 
 
 

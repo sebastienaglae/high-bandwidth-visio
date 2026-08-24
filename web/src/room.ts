@@ -9,6 +9,7 @@ import type {
   Role,
 } from "@visio/shared";
 import { Signal } from "./signal.js";
+import { e2eeSupported } from "./e2ee-crypto.js";
 
 export interface RemoteStream {
   peerId: string;
@@ -74,10 +75,13 @@ export class RoomClient {
     readonly wsUrl: string,
     readonly roomId: string,
     readonly displayName: string,
-    readonly iceServers: IceServer[] = []
+    readonly iceServers: IceServer[] = [],
+    readonly e2ee = false
   ) {
     this.signal = new Signal(wsUrl);
     this.signal.onPush((push) => this.handlePush(push));
+    // Patch before any transport exists so streams are captured in time.
+    if (this.e2ee) RoomClient.patchPeerConnections();
     this.signal.onResume = async () => {
       const snap = (await this.signal.request("resume", {
         peerId: this.peerId,
@@ -239,6 +243,7 @@ export class RoomClient {
       });
       if (track.kind === "video") this.camProducer = producer;
       else this.micProducer = producer;
+      if (producer.rtpSender) this.attachEncode(producer.rtpSender);
     }
     this.localStream = localStream;
   }
@@ -267,6 +272,7 @@ export class RoomClient {
         codecOptions: { videoGoogleStartBitrate: 5000 },
       });
       this.screens.set(producer.id, { producer, stream: display });
+      if (producer.rtpSender) this.attachEncode(producer.rtpSender);
       track.onended = () => this.stopScreenShare(producer.id);
       return producer.id;
     } catch {
@@ -407,6 +413,7 @@ export class RoomClient {
       rtpParameters: data.rtpParameters as never,
       appData: {},
     });
+    if (consumer.rtpReceiver) this.attachDecode(consumer.rtpReceiver);
 
     const source =
       (data.appData as { source?: string } | undefined)?.source ?? sourceHint ?? "cam";
@@ -567,9 +574,81 @@ export class RoomClient {
     return this.role;
   }
 
+  // ---- End-to-end media encryption (Insertable Streams) ----
+  private e2eeWorker: Worker | null = null;
+  private static e2eePatched = false;
+
+  /**
+   * createEncodedStreams() must run before media flows, so we capture the
+   * streams the moment mediasoup-client attaches senders/receivers to its
+   * RTCPeerConnection and stash them on the objects.
+   */
+  private static patchPeerConnections(): void {
+    if (RoomClient.e2eePatched) return;
+    RoomClient.e2eePatched = true;
+    const stash = (obj: unknown): void => {
+      const o = obj as { createEncodedStreams?: () => unknown; __e2eeStreams?: unknown };
+      if (o && typeof o.createEncodedStreams === "function" && !o.__e2eeStreams) {
+        try {
+          o.__e2eeStreams = o.createEncodedStreams();
+        } catch {
+          /* already sending/receiving */
+        }
+      }
+    };
+    const origAddTrack = RTCPeerConnection.prototype.addTrack;
+    RTCPeerConnection.prototype.addTrack = function (track, ...rest) {
+      const sender = origAddTrack.call(this, track, ...rest);
+      stash(sender);
+      return sender;
+    };
+    const origAddTransceiver = RTCPeerConnection.prototype.addTransceiver;
+    RTCPeerConnection.prototype.addTransceiver = function (a, b) {
+      const tr = origAddTransceiver.call(this, a, b);
+      stash(tr.receiver);
+      return tr;
+    };
+  }
+
+  private ensureE2eeWorker(): Worker | null {
+    if (!this.e2ee || this.e2eeWorker) return this.e2eeWorker;
+    if (!e2eeSupported()) {
+      console.warn("[e2ee] not supported by this browser; running without E2EE");
+      return null;
+    }
+    try {
+      RoomClient.patchPeerConnections();
+      const w = new Worker(new URL("./e2ee.worker.ts", import.meta.url), {
+        type: "module",
+      });
+      w.postMessage({ operation: "setKey", keyMaterial: this.roomId });
+      this.e2eeWorker = w;
+    } catch (e) {
+      console.warn("[e2ee] worker failed to start:", e);
+      return null;
+    }
+    return this.e2eeWorker;
+  }
+
+  private attachEncode(sender: RTCRtpSender): void {
+    const w = this.ensureE2eeWorker();
+    if (!w) return;
+    const streams = (sender as unknown as { __e2eeStreams?: unknown }).__e2eeStreams;
+    if (streams) w.postMessage({ operation: "encode", streams });
+  }
+
+  private attachDecode(receiver: RTCRtpReceiver): void {
+    const w = this.ensureE2eeWorker();
+    if (!w) return;
+    const streams = (receiver as unknown as { __e2eeStreams?: unknown }).__e2eeStreams;
+    if (streams) w.postMessage({ operation: "decode", streams });
+  }
+
   close(): void {
     if (this.qualityTimer !== null) window.clearInterval(this.qualityTimer);
     this.qualityTimer = null;
+    this.e2eeWorker?.terminate();
+    this.e2eeWorker = null;
     this.stopAllScreenShares();
     this.sendTransport?.close();
     this.recvTransport?.close();

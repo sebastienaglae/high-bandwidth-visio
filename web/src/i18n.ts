@@ -31,6 +31,7 @@ const EN = {
   theme: "Toggle theme",
   leave: "Leave the room",
   reconnecting: "Reconnecting…",
+  e2eeLabel: "End-to-end encryption (all participants must enable it)",
   record: "Record the meeting (local)",
   stopRecording: "Stop recording",
   recordingSaved: "Recording saved to downloads",
@@ -120,6 +121,7 @@ const FR: Dict = {
   theme: "Changer de thème",
   leave: "Quitter le salon",
   reconnecting: "Reconnexion…",
+  e2eeLabel: "Chiffrement de bout en bout (tous les participants doivent l'activer)",
   record: "Enregistrer la réunion (local)",
   stopRecording: "Arrêter l'enregistrement",
   recordingSaved: "Enregistrement téléchargé",
@@ -203,6 +205,7 @@ const JA: Dict = {
   theme: "テーマを切り替え",
   leave: "退室する",
   reconnecting: "再接続中…",
+  e2eeLabel: "エンドツーエンド暗号化（全員が有効にする必要があります）",
   record: "ミーティングを記録（ローカル）",
   stopRecording: "記録を停止",
   recordingSaved: "記録をダウンロードに保存しました",
@@ -308,6 +311,7 @@ export const MODE_LABELS: Record<Lang, Record<string, string>> = {
   fr: { ultra: "Ultra", low: "Bas", balanced: "Équilibré", high: "Haut", max: "Max" },
   ja: { ultra: "超低遅延", low: "低遅延", balanced: "バランス", high: "高画質", max: "最高" },
 };
+
 
 
 

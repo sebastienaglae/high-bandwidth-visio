@@ -73,6 +73,13 @@ Every user-facing surface in visio, with the features it carries.
 - File transfers show live progress bars, can be cancelled by the sender, and
   files can be dragged onto the chat panel
 
+### Privacy
+- Optional end-to-end media encryption (Insertable Streams): frames are
+  AES-GCM encrypted in the browser with a key derived from the room token,
+  so the SFU forwards ciphertext it cannot read. Enabled per participant on
+  the pre-join screen; every participant must enable it. Data channels are
+  already peer-to-peer through SCTP and files are never server-visible.
+
 ### Errors
 - Styled failure screen ("Could not join" + reason) instead of a dead page
 
@@ -98,6 +105,7 @@ Every user-facing surface in visio, with the features it carries.
 - Ephemeral rooms (closed when last participant leaves)
 - Rate limiting (60 signaling msg/s per connection, per-IP HTTP limits), capacity caps, security headers, graceful shutdown, production boot guard
 - `/healthz`, `/api/new-room`, `/api/speedtest`
+
 
 
 

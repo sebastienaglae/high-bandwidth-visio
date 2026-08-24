@@ -15,6 +15,7 @@ import { listAudioVideoDevices, pickDevice, deviceLabel } from "./devices.js";
 import { pickDominant } from "./layout.js";
 import { playCue } from "./audio.js";
 import { renderMarkdown } from "./markdown.js";
+import { e2eeSupported } from "./e2ee-crypto.js";
 import { MODE_PROFILES, MODES } from "@visio/shared";
 import type { Mode, WBOp, IceServer } from "@visio/shared";
 import "./style.css";
@@ -310,6 +311,14 @@ async function renderPreJoin(roomId: string): Promise<void> {
     stream?.getVideoTracks().forEach((tr) => (tr.enabled = camOn));
   };
 
+  const e2eeOn = localStorage.getItem("visio:e2ee") === "1";
+  const e2eeToggle = el("input", { type: "checkbox", id: "e2ee" }) as HTMLInputElement;
+  e2eeToggle.checked = e2eeOn;
+  e2eeToggle.onchange = () => {
+    localStorage.setItem("visio:e2ee", e2eeToggle.checked ? "1" : "0");
+  };
+  const e2eeLabel = el("label", { class: "e2ee-label", for: "e2ee" }, t("e2eeLabel"));
+
   const joinBtn = el("button", { class: "primary" }, t("joinRoom"));
   joinBtn.onclick = () => {
     const name = nameInput.value.trim() || t("guest");
@@ -326,6 +335,7 @@ async function renderPreJoin(roomId: string): Promise<void> {
         el("div", { class: "row gap full" }, camSelect, micSelect),
         nameInput,
         el("div", { class: "row gap" }, micBtn, camBtn),
+        el("div", { class: "row gap e2ee-row" }, e2eeToggle, e2eeLabel),
         joinBtn
       )
     )
@@ -400,7 +410,8 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     .then((d) => d.iceServers ?? [])
     .catch(() => [] as IceServer[]);
 
-  const client = new RoomClient(wsUrl("/ws"), roomId, displayName, iceServers);
+  const e2ee = localStorage.getItem("visio:e2ee") === "1" && e2eeSupported();
+  const client = new RoomClient(wsUrl("/ws"), roomId, displayName, iceServers, e2ee);
   let hostPeerId = "";
   // Debug hook: append ?debug to inspect transports/consumers from the console.
   if (new URLSearchParams(location.search).has("debug")) {
