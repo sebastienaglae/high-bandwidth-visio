@@ -55,6 +55,13 @@ Every user-facing surface in visio, with the features it carries.
 - Route watch: re-trace every 30 s, push notification on path change
 - Download speed test (throttled once / 30 s per IP)
 
+### Moderation & presence
+- First participant becomes host; host migrates automatically on leave/disconnect
+- Host can mute a participant (server-side producer pause + notification),
+  remove a participant, and lock/unlock the room (locked rooms reject joins)
+- Active-speaker highlighting (server audio-level observer → tile outline)
+- Per-tile connection quality (good/mid/low from inbound RTP loss & jitter)
+
 ### Errors
 - Styled failure screen ("Could not join" + reason) instead of a dead page
 
@@ -80,3 +87,4 @@ Every user-facing surface in visio, with the features it carries.
 - Ephemeral rooms (closed when last participant leaves)
 - Rate limiting (60 signaling msg/s per connection, per-IP HTTP limits), capacity caps, security headers, graceful shutdown, production boot guard
 - `/healthz`, `/api/new-room`, `/api/speedtest`
+

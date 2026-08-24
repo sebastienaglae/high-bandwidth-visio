@@ -63,6 +63,7 @@ async function handleMessage(
       if (!ROOM_ID_RE.test(msg.roomId)) throw new Error("invalid room id");
       const room = await getOrCreateRoom(msg.roomId);
       if (room.isFull()) throw new Error("room is full");
+      if (room.locked) throw new Error("room is locked");
       const peer = createPeer(session, room, socket, msg.displayName);
       session.peer = peer;
 
@@ -72,6 +73,9 @@ async function handleMessage(
       respond(socket, requestId, {
         peerId: peer.id,
         roomId: room.id,
+        role: room.roleOf(peer.id),
+        locked: room.locked,
+        hostPeerId: room.hostPeerId,
         rtpCapabilities: room.router.rtpCapabilities,
         peers: room.listPeers().filter((p) => p.peerId !== peer.id),
         producers,
@@ -251,11 +255,61 @@ async function handleMessage(
       respond(socket, requestId, {
         peerId: peer.id,
         roomId: room.id,
+        role: room.roleOf(peer.id),
+        locked: room.locked,
+        hostPeerId: room.hostPeerId,
         peers: room.listPeers().filter((p) => p.peerId !== peer.id),
         producers: snapshotProducers(room),
         dataProducers: snapshotDataProducers(room),
         wbOps: room.wbOps,
       });
+      break;
+    }
+
+    case "moderate": {
+      const peer = requirePeer(session);
+      const room = requireRoom(peer);
+      if (room.hostPeerId !== peer.id) throw new Error("only the host can moderate");
+
+      switch (msg.action) {
+        case "lock": {
+          room.locked = true;
+          room.broadcast({ type: "roomLocked" });
+          respond(socket, requestId, {});
+          break;
+        }
+        case "unlock": {
+          room.locked = false;
+          respond(socket, requestId, {});
+          break;
+        }
+        case "mute": {
+          const target = msg.targetPeerId ? room.getPeer(msg.targetPeerId) : undefined;
+          if (!target) throw new Error("target not found");
+          for (const p of target.producers.values()) {
+            if (p.kind === "audio" && !p.paused) await p.pause();
+          }
+          room.broadcast({
+            type: "moderated",
+            action: "mute",
+            targetPeerId: target.id,
+            by: peer.displayName,
+          });
+          respond(socket, requestId, {});
+          break;
+        }
+        case "kick": {
+          const target = msg.targetPeerId ? room.getPeer(msg.targetPeerId) : undefined;
+          if (!target) throw new Error("target not found");
+          if (target.id === peer.id) throw new Error("cannot kick yourself");
+          send(target.socket, { type: "kicked" });
+          cleanupPeer(target);
+          respond(socket, requestId, {});
+          break;
+        }
+        default:
+          throw new Error("unknown moderation action");
+      }
       break;
     }
 
@@ -555,6 +609,7 @@ export function handleConnection(socket: WebSocket, clientIp: string): void {
     if (!peer || peer.closed || peer.socket !== socket) return;
     // Grace period: media/transports stay alive so the client can resume.
     peer.disconnected = true;
+    peerRooms.get(peer)?.onPeerDisconnected(peer.id);
     peer.disconnectTimer = setTimeout(() => {
       if (!peer.disconnected) return;
       console.log(
@@ -581,3 +636,5 @@ function cleanupPeer(peer: Peer): void {
     closeRoomIfEmpty(room.id);
   }
 }
+
+

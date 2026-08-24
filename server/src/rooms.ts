@@ -33,11 +33,45 @@ export class Room {
   readonly router: Router;
   readonly createdAt = Date.now();
   wbOps: import("@visio/shared").WBOp[] = [];
+  hostPeerId: string | null = null;
+  locked = false;
+  lastSpeakerPeerId: string | null = null;
   private peers = new Map<string, Peer>();
 
   constructor(id: string, router: Router) {
     this.id = id;
     this.router = router;
+    void this.setupAudioLevelObserver();
+  }
+
+  private async setupAudioLevelObserver(): Promise<void> {
+    try {
+      const observer = await this.router.createAudioLevelObserver({
+        threshold: -70,
+        interval: 800,
+      });
+      observer.on("volumes", (volumes) => {
+        const top = volumes[0];
+        if (!top) return;
+        const speaker = this.ownerOf(top.producer.id);
+        if (!speaker || speaker === this.lastSpeakerPeerId) return;
+        this.lastSpeakerPeerId = speaker;
+        this.broadcast({ type: "activeSpeaker", peerId: speaker });
+      });
+    } catch {
+      /* observer unavailable; active-speaker highlighting stays off */
+    }
+  }
+
+  private ownerOf(producerId: string): string | null {
+    for (const peer of this.peers.values()) {
+      if (peer.producers.has(producerId)) return peer.id;
+    }
+    return null;
+  }
+
+  roleOf(peerId: string): "host" | "guest" {
+    return this.hostPeerId === peerId ? "host" : "guest";
   }
 
   get rtpCapabilities(): RtpCapabilities {
@@ -46,6 +80,8 @@ export class Room {
 
   addPeer(peer: Peer): void {
     this.peers.set(peer.id, peer);
+    // First participant becomes the host.
+    if (!this.hostPeerId) this.hostPeerId = peer.id;
   }
 
   isFull(): boolean {
@@ -59,7 +95,26 @@ export class Room {
   removePeer(peerId: string): Peer | undefined {
     const peer = this.peers.get(peerId);
     this.peers.delete(peerId);
+    // Host migration: oldest remaining peer takes over.
+    if (peer && this.hostPeerId === peerId) {
+      this.promoteNextHost(peerId);
+    }
     return peer;
+  }
+
+  /** Called when a peer's socket drops; host migrates immediately. */
+  onPeerDisconnected(peerId: string): void {
+    if (this.hostPeerId === peerId) this.promoteNextHost(peerId);
+  }
+
+  private promoteNextHost(excludePeerId: string): void {
+    const next = [...this.peers.values()].find((p) => p.id !== excludePeerId);
+    if (next) {
+      this.hostPeerId = next.id;
+      this.broadcast({ type: "roleChanged", peerId: next.id, role: "host" });
+    } else {
+      this.hostPeerId = null;
+    }
   }
 
   listPeers(): { peerId: string; displayName: string }[] {
@@ -225,3 +280,4 @@ function listenIpIsLoopback(ip: string): boolean {
 function isUnspecified(ip: string): boolean {
   return ip === "0.0.0.0" || ip === "::";
 }
+

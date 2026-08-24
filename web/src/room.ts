@@ -6,6 +6,7 @@ import type {
   ModeProfile,
   WBOp,
   IceServer,
+  Role,
 } from "@visio/shared";
 import { Signal } from "./signal.js";
 
@@ -46,6 +47,10 @@ export class RoomClient {
   localStream: MediaStream | null = null;
   /** Set once join() succeeds. */
   peerId = "";
+  /** Our room role; "host" can moderate. */
+  role: Role = "guest";
+  /** Current host of the room (from join/resume/roleChanged). */
+  hostPeerId = "";
   /** Our public IP as seen by the server (from the welcome push). */
   clientIp = "";
 
@@ -57,6 +62,12 @@ export class RoomClient {
   onPeerLeft: ((peerId: string) => void) | null = null;
   onAppMessage: ((peerId: string, data: AppData) => void) | null = null;
   onWbOps: ((ops: WBOp[]) => void) | null = null;
+  onRoleChanged: ((peerId: string, role: Role) => void) | null = null;
+  onActiveSpeaker: ((peerId: string) => void) | null = null;
+  onModerated: ((action: "mute", by: string) => void) | null = null;
+  onKicked: (() => void) | null = null;
+  onRoomLocked: (() => void) | null = null;
+  onQuality: ((peerId: string, key: string, quality: "good" | "mid" | "low") => void) | null = null;
 
   constructor(
     readonly wsUrl: string,
@@ -140,6 +151,9 @@ export class RoomClient {
     };
 
     this.peerId = (joined as unknown as { peerId?: string }).peerId ?? "";
+    this.role = ((joined as unknown as { role?: Role }).role ?? "guest") as Role;
+    this.hostPeerId = (joined as unknown as { hostPeerId?: string }).hostPeerId ?? "";
+    this.role = ((joined as unknown as { role?: Role }).role ?? "guest") as Role;
 
     await this.device.load({ routerRtpCapabilities: joined.rtpCapabilities as never });
 
@@ -469,10 +483,85 @@ export class RoomClient {
       case "wbOps":
         this.onWbOps?.(push.ops);
         break;
+      case "roleChanged":
+        if (push.role === "host") this.hostPeerId = push.peerId;
+        else if (this.hostPeerId === push.peerId) this.hostPeerId = "";
+        if (push.peerId === this.peerId) this.role = push.role;
+        this.onRoleChanged?.(push.peerId, push.role);
+        break;
+      case "activeSpeaker":
+        this.onActiveSpeaker?.(push.peerId);
+        break;
+      case "moderated":
+        if (push.targetPeerId === this.peerId) this.onModerated?.("mute", push.by);
+        break;
+      case "kicked":
+        this.onKicked?.();
+        break;
+      case "roomLocked":
+        this.onRoomLocked?.();
+        break;
     }
   }
 
+  /** Poll per-tile connection quality from inbound RTP stats. */
+  private qualityTimer: number | null = null;
+  startQualityPolling(): void {
+    if (this.qualityTimer !== null) return;
+    this.qualityTimer = window.setInterval(async () => {
+      if (!this.recvTransport) return;
+      try {
+        const report = await this.recvTransport.getStats();
+        const ssrcToQuality = new Map<number, "good" | "mid" | "low">();
+        const grade = (jitterSec: number, lost: number, received: number): "good" | "mid" | "low" => {
+          const lossRatio = received + lost > 0 ? lost / (received + lost) : 0;
+          if (lossRatio > 0.08 || jitterSec > 0.15) return "low";
+          if (lossRatio > 0.03 || jitterSec > 0.06) return "mid";
+          return "good";
+        };
+        const each = (fn: (s: Record<string, unknown>) => void): void => {
+          if (!report) return;
+          if (report instanceof Map) report.forEach(fn as never);
+          else if (typeof (report as { forEach?: unknown }).forEach === "function") {
+            (report as { forEach: (f: (s: unknown) => void) => void }).forEach(fn as never);
+          }
+        };
+        each((s) => {
+          if (s.type !== "inbound-rtp" || s.kind !== "video") return;
+          const ssrc = s.ssrc as number | undefined;
+          if (typeof ssrc !== "number") return;
+          ssrcToQuality.set(
+            ssrc,
+            grade(Number(s.jitter ?? 0), Number(s.packetsLost ?? 0), Number(s.packetsReceived ?? 0))
+          );
+        });
+        for (const entry of this.consumers.values()) {
+          if (entry.consumer.kind !== "video" || entry.consumer.closed) continue;
+          const ssrc = (
+            entry.consumer.rtpParameters as { encodings?: { ssrc?: number }[] }
+          ).encodings?.[0]?.ssrc;
+          const q = typeof ssrc === "number" ? ssrcToQuality.get(ssrc) : undefined;
+          if (q) {
+            this.onQuality?.(
+              entry.peerId,
+              entry.source === "screen" ? `screen:${entry.producerId}` : "cam",
+              q
+            );
+          }
+        }
+      } catch {
+        /* transport closing */
+      }
+    }, 2000);
+  }
+
+  get roleValue(): Role {
+    return this.role;
+  }
+
   close(): void {
+    if (this.qualityTimer !== null) window.clearInterval(this.qualityTimer);
+    this.qualityTimer = null;
     this.stopAllScreenShares();
     this.sendTransport?.close();
     this.recvTransport?.close();

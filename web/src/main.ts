@@ -396,6 +396,7 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     .catch(() => [] as IceServer[]);
 
   const client = new RoomClient(wsUrl("/ws"), roomId, displayName, iceServers);
+  let hostPeerId = "";
   // Debug hook: append ?debug to inspect transports/consumers from the console.
   if (new URLSearchParams(location.search).has("debug")) {
     (window as unknown as { __room: RoomClient }).__room = client;
@@ -435,11 +436,83 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   function relabel(peerId: string): void {
     for (const [key, tile] of tiles) {
       if (!key.startsWith(`${peerId}:`)) continue;
-      const name =
-        peerId === client.peerId ? `${displayName} (${t("you")})` : peerNames.get(peerId) ?? t("guest");
-      tile.label.textContent = key.includes(":screen:") ? `${name} — ${t("screenSuffix")}` : name;
+      const isSelf = peerId === client.peerId;
+      const name = isSelf ? `${displayName} (${t("you")})` : peerNames.get(peerId) ?? t("guest");
+      const suffix = key.includes(":screen:") ? ` — ${t("screenSuffix")}` : "";
+      const hostTag = hostPeerId === peerId ? `${t("host")} · ` : "";
+      tile.label.textContent = `${hostTag}${name}${suffix}`;
+      rebuildTileActions(peerId, key, tile, isSelf);
     }
   }
+
+  /** Host-only per-tile moderation buttons on remote camera tiles. */
+  function rebuildTileActions(peerId: string, key: string, tile: Tile, isSelf: boolean): void {
+    tile.label.querySelectorAll("button").forEach((b) => b.remove());
+    if (isSelf || key.includes(":screen:")) return;
+    if (hostPeerId !== client.peerId || client.peerId === "") return;
+
+    const muteBtn = el("button", { class: "label-btn", title: t("mutePeer"), "aria-label": t("mutePeer") });
+    muteBtn.replaceChildren(icon("mic-off", 12));
+    muteBtn.onclick = (e) => {
+      e.stopPropagation();
+      void client.signal.request("moderate", { action: "mute", targetPeerId: peerId });
+    };
+    const kickBtn = el("button", { class: "label-btn danger", title: t("kickPeer"), "aria-label": t("kickPeer") });
+    kickBtn.replaceChildren(icon("x", 12));
+    kickBtn.onclick = (e) => {
+      e.stopPropagation();
+      void client.signal.request("moderate", { action: "kick", targetPeerId: peerId });
+    };
+    tile.label.append(muteBtn, kickBtn);
+  }
+
+  function refreshAllLabels(): void {
+    for (const peerId of new Set([...tiles.keys()].map((k) => k.split(":")[0]))) {
+      relabel(peerId);
+    }
+  }
+
+  client.onRoleChanged = (peerId, role) => {
+    if (role === "host") hostPeerId = peerId;
+    else if (hostPeerId === peerId) hostPeerId = "";
+    refreshAllLabels();
+    lockBtn.classList.toggle("hidden", hostPeerId !== client.peerId);
+  };
+
+  client.onActiveSpeaker = (peerId) => {
+    for (const [key, tile] of tiles) {
+      const speaking = key === tileKey(peerId, "cam");
+      tile.root.classList.toggle("speaking", speaking);
+      if (speaking) {
+        window.setTimeout(() => tile.root.classList.remove("speaking"), 2000);
+      }
+    }
+  };
+
+  client.onModerated = (action, by) => {
+    if (action === "mute" && micOn) {
+      micOn = false;
+      setIconControl(micBtn, micOn, "mic", "mic-off");
+      client.setTrackEnabled("audio", false);
+      chatSystem(`${t("youWereMuted")} (${by})`);
+    }
+  };
+
+  client.onKicked = () => {
+    client.close();
+    renderError(t("kickedTitle"), t("kickedDetail"));
+  };
+
+  client.onRoomLocked = () => {
+    chatSystem(t("roomNowLocked"));
+  };
+
+  client.onQuality = (peerId, key, quality) => {
+    const tile = tiles.get(tileKey(peerId, key));
+    if (!tile) return;
+    tile.root.classList.toggle("q-low", quality === "low");
+    tile.root.classList.toggle("q-mid", quality === "mid");
+  };
 
   client.onPeerJoined = (peerId, name) => {
     peerNames.set(peerId, name);
@@ -493,6 +566,7 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   await client.join();
   await client.publish(localStream);
   await client.initDataChannel();
+  hostPeerId = client.hostPeerId;
 
   // ---- Mode selector ----
   const modeBar = el("div", { class: "mode-bar" });
@@ -526,6 +600,8 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   const boardBtn = iconControl("pen", "pen", t("boardTitle"), false);
   const copyBtn = iconControl("link", "check", t("invite"), false);
   const netBtn = iconControl("activity", "activity", t("netDiagnostics"), false);
+  const lockBtn = iconControl("lock", "unlock", t("lockRoom"), false);
+  lockBtn.classList.add("hidden"); // guests never see it
   const leaveBtn = iconControl("leave", "leave", t("leave"), false, "danger");
   const roomMain = el("main", { class: "room" });
 
@@ -580,9 +656,17 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   };
 
   // ---- Chat + temporary file sharing ----
+  lockBtn.onclick = () => {
+    const locking = lockBtn.classList.contains("off"); // off = currently unlocked
+    void client.signal.request("moderate", { action: locking ? "lock" : "unlock" });
+    setIconControl(lockBtn, locking, "lock");
+    lockBtn.title = locking ? t("unlockRoom") : t("lockRoom");
+  };
+
   const chat = buildChatPanel(client, displayName, peerNames, () => {
     setIconControl(chatBtn, false, "chat");
   });
+  const chatSystem = chat.system;
   chatBtn.onclick = () => {
     const open = !chat.root.classList.contains("hidden");
     chat.root.classList.toggle("hidden", open);
@@ -621,7 +705,7 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     el("footer", { class: "controls" },
       modeBar,
       el("div", { class: "controls-group" },
-        micBtn, camBtn, screenBtn, chatBtn, boardBtn, copyBtn, netBtn,
+        micBtn, camBtn, screenBtn, chatBtn, boardBtn, copyBtn, netBtn, lockBtn,
         themeToggleButton(),
         leaveBtn
       )
@@ -636,6 +720,11 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     ? (savedMode as Mode)
     : "balanced";
   selectMode(initialMode);
+
+  // Moderation UI state for this participant's role.
+  refreshAllLabels();
+  lockBtn.classList.toggle("hidden", hostPeerId !== client.peerId);
+  client.startQualityPolling();
 }
 
 function iconControl(
@@ -677,7 +766,7 @@ function buildChatPanel(
   displayName: string,
   peerNames: Map<string, string>,
   onClose: () => void
-): { root: HTMLElement } {
+): { root: HTMLElement; system: (text: string) => void } {
   const root = el("aside", { class: "side-panel chat-panel hidden" });
   const messages = el("div", { class: "chat-messages" });
   const input = el("input", { type: "text", placeholder: t("chatPlaceholder"), maxlength: "2000" });
@@ -761,9 +850,7 @@ function buildChatPanel(
 
   function addSystem(text: string): void {
     addLine(el("div", { class: "msg system" }, el("span", {}, text)));
-  }
-
-  const incomingFiles = new Map<string, FileIncoming>();
+  }  const incomingFiles = new Map<string, FileIncoming>();
 
   client.onAppMessage = (peerId, data) => {
     const name = peerNames.get(peerId) ?? t("guest");
@@ -805,7 +892,7 @@ function buildChatPanel(
     f.received += payload.length;
   };
 
-  return { root };
+  return { root, system: addSystem };
 }
 
 // ---------- Whiteboard ----------

@@ -56,6 +56,14 @@ const PATHS: Record<string, string> = {
     '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   x:
     '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  lock:
+    '<rect x="5" y="11" width="14" height="10" rx="2"/>' +
+    '<path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  unlock:
+    '<rect x="5" y="11" width="14" height="10" rx="2"/>' +
+    '<path d="M8 11V7a4 4 0 0 1 7.5-1.9"/>',
+  star:
+    '<path d="m12 3 2.7 5.6 6.3.9-4.5 4.4 1 6.1-5.5-2.9-5.5 2.9 1-6.1L3 9.5l6.3-.9L12 3z"/>',
 };
 
 export function icon(name: keyof typeof PATHS | string, size = 18): SVGSVGElement {

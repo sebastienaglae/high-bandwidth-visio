@@ -308,7 +308,29 @@ input:focus { border-color: var(--accent); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
+
+.label-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+}
+.label-btn:hover { color: var(--text); }
+.label-btn.danger:hover { color: var(--danger); }
+
+.tile.speaking {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.tile.q-mid { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: -2px; }
+.tile.q-low { outline: 2px solid var(--danger); outline-offset: -2px; }
 
 .controls {
   display: flex;

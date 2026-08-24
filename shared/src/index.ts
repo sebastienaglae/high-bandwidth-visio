@@ -108,7 +108,8 @@ export type ClientMessage =
   | ConsumeDataRequest
   | WbOpRequest
   | WbClearRequest
-  | ResumeRequest;
+  | ResumeRequest
+  | ModerateRequest;
 
 // ---- Server -> Client (requests/responses + events) ----
 
@@ -121,6 +122,9 @@ export interface JoinedEvent {
   type: "joined";
   peerId: string;
   roomId: string;
+  role: Role;
+  locked: boolean;
+  hostPeerId: string;
   rtpCapabilities: RtpCapabilities;
   peers: PeerInfo[];
   producers: {
@@ -186,7 +190,12 @@ export type ServerPush =
   | RouteChangedPush
   | NewDataProducerEvent
   | DataProducerClosedEvent
-  | WbOpsPush;
+  | WbOpsPush
+  | ActiveSpeakerPush
+  | ModeratedPush
+  | RoleChangedPush
+  | RoomLockedPush
+  | KickedPush;
 
 export type ServerResponse =
   | {
@@ -326,6 +335,42 @@ export interface RtcConfig {
   iceServers: IceServer[];
 }
 
+// ---- Moderation & presence ----
+
+export type Role = "host" | "guest";
+
+export interface ModerateRequest {
+  type: "moderate";
+  action: "mute" | "kick" | "lock" | "unlock";
+  targetPeerId?: string;
+}
+
+export interface ActiveSpeakerPush {
+  type: "activeSpeaker";
+  peerId: string;
+}
+
+export interface ModeratedPush {
+  type: "moderated";
+  action: "mute";
+  targetPeerId: string;
+  by: string;
+}
+
+export interface RoleChangedPush {
+  type: "roleChanged";
+  peerId: string;
+  role: Role;
+}
+
+export interface RoomLockedPush {
+  type: "roomLocked";
+}
+
+export interface KickedPush {
+  type: "kicked";
+}
+
 export interface WelcomePush {
   type: "welcome";
   clientIp: string;
@@ -381,3 +426,4 @@ export interface WbOpsPush {
 
 export { validateWbOps } from "./wb.js";
 export type { WBOp, WBStroke } from "./wb.js";
+
