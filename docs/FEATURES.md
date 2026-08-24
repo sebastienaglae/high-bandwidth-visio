@@ -17,7 +17,8 @@ Every user-facing surface in visio, with the features it carries.
 
 | Feature | Notes |
 |---|---|
-| Live camera preview | 720p request, mirrored |
+| Live camera preview | Saved camera/mic, mirrored |
+| Device pickers | Camera & microphone dropdowns when multiple devices exist; choice persisted |
 | Mic / cam toggles | State carried into the room |
 | Name confirmation | Falls back to "Guest" |
 | Graceful degradation | Denied camera still allows joining |
@@ -56,6 +57,15 @@ Every user-facing surface in visio, with the features it carries.
 
 ### Errors
 - Styled failure screen ("Could not join" + reason) instead of a dead page
+
+### Resilience
+- Automatic signaling reconnection with exponential backoff (8 tries)
+- Session resume: a dropped WebSocket no longer ends the call — media keeps
+  flowing during a 15 s grace window, then the client re-attaches with the
+  same identity and reconciles peers/media/whiteboard state
+- Visible "Reconnecting…" banner during drops
+- Optional TURN relay (`/api/rtc-config`, compose profile `turn`) for
+  symmetric-NAT participants
 
 ## 4. Desktop app (Tauri v2 — Windows / macOS)
 

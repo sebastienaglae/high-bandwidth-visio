@@ -23,6 +23,9 @@ export interface Peer {
   dataProducers: Map<string, import("mediasoup/types").DataProducer>;
   dataConsumers: Map<string, import("mediasoup/types").DataConsumer>;
   closed: boolean;
+  /** Set while waiting for the client to resume after a WS drop. */
+  disconnected?: boolean;
+  disconnectTimer?: NodeJS.Timeout;
 }
 
 export class Room {
@@ -136,6 +139,17 @@ export function closeRoomIfEmpty(roomId: string): void {
     rooms.delete(roomId);
     console.log(`[room] closed ${roomId}`);
   }
+}
+
+/** Locate a peer waiting to resume (any room). */
+export function findDisconnectedPeer(
+  peerId: string
+): { peer: Peer; room: Room } | undefined {
+  for (const room of rooms.values()) {
+    const peer = room.getPeer(peerId);
+    if (peer && peer.disconnected) return { peer, room };
+  }
+  return undefined;
 }
 
 /**

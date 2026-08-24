@@ -11,6 +11,7 @@ import { newId } from "./ids.js";
 import { traceAndEnrich } from "./net/enrich.js";
 import { config } from "./config.js";
 import { validateWbOps } from "@visio/shared";
+import { findDisconnectedPeer } from "./rooms.js";
 
 interface Session {
   peer: Peer | null;
@@ -229,6 +230,32 @@ async function handleMessage(
     case "traceroute": {      const target = normalizeTarget(msg.target, session.clientIp);
       const result = await runTrace(session, socket, target);
       respond(socket, requestId, { ...result });
+      break;
+    }
+
+    case "resume": {
+      if (session.peer) throw new Error("already joined");
+      const found = findDisconnectedPeer(msg.peerId);
+      if (!found) throw new Error("unknown session");
+      const { peer, room } = found;
+      if (peer.disconnectTimer) {
+        clearTimeout(peer.disconnectTimer);
+        peer.disconnectTimer = undefined;
+      }
+      peer.disconnected = false;
+      peer.socket = socket;
+      bindRoom(peer, room);
+      session.peer = peer;
+      console.log(`[room] ${room.id}: ${peer.displayName} resumed`);
+
+      respond(socket, requestId, {
+        peerId: peer.id,
+        roomId: room.id,
+        peers: room.listPeers().filter((p) => p.peerId !== peer.id),
+        producers: snapshotProducers(room),
+        dataProducers: snapshotDataProducers(room),
+        wbOps: room.wbOps,
+      });
       break;
     }
 
@@ -525,19 +552,32 @@ export function handleConnection(socket: WebSocket, clientIp: string): void {
   socket.on("close", () => {
     if (session.routeWatchTimer) clearInterval(session.routeWatchTimer);
     const peer = session.peer;
-    if (!peer || peer.closed) return;
-    peer.closed = true;
-    const room = peerRooms.get(peer);
-    for (const t of peer.transports.values()) t.close();
-    peer.transports.clear();
-    peer.producers.clear();
-    peer.consumers.clear();
-    peer.dataProducers.clear();
-    peer.dataConsumers.clear();
-    if (room) {
-      room.removePeer(peer.id);
-      room.broadcast({ type: "peerLeft", peerId: peer.id });
-      closeRoomIfEmpty(room.id);
-    }
+    if (!peer || peer.closed || peer.socket !== socket) return;
+    // Grace period: media/transports stay alive so the client can resume.
+    peer.disconnected = true;
+    peer.disconnectTimer = setTimeout(() => {
+      if (!peer.disconnected) return;
+      console.log(
+        `[room] ${peerRooms.get(peer)?.id ?? "?"}: ${peer.displayName} dropped (grace expired)`
+      );
+      cleanupPeer(peer);
+    }, config.limits.resumeGraceMs);
   });
+}
+
+function cleanupPeer(peer: Peer): void {
+  peer.closed = true;
+  peer.disconnected = false;
+  const room = peerRooms.get(peer);
+  for (const t of peer.transports.values()) t.close();
+  peer.transports.clear();
+  peer.producers.clear();
+  peer.consumers.clear();
+  peer.dataProducers.clear();
+  peer.dataConsumers.clear();
+  if (room) {
+    room.removePeer(peer.id);
+    room.broadcast({ type: "peerLeft", peerId: peer.id });
+    closeRoomIfEmpty(room.id);
+  }
 }

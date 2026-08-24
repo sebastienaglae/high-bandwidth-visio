@@ -11,8 +11,9 @@ import {
   wsUrl,
 } from "./env.js";
 import { t, setLang, getLang, allLangs, MODE_LABELS } from "./i18n.js";
+import { listAudioVideoDevices, pickDevice, deviceLabel } from "./devices.js";
 import { MODE_PROFILES, MODES } from "@visio/shared";
-import type { Mode, WBOp } from "@visio/shared";
+import type { Mode, WBOp, IceServer } from "@visio/shared";
 import "./style.css";
 
 const app = document.getElementById("app") as HTMLElement;
@@ -222,20 +223,77 @@ async function renderPreJoin(roomId: string): Promise<void> {
     value: savedName,
   });
   let stream: MediaStream | null = null;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: true,
-    });
-    preview.srcObject = stream;
-  } catch {
-    // Camera may be denied; still allow join.
-  }
-
   let micOn = true;
   let camOn = true;
   const micBtn = el("button", { class: "icon-toggle", title: t("toggleMic"), "aria-label": t("toggleMic") }, icon("mic"));
   const camBtn = el("button", { class: "icon-toggle", title: t("toggleCam"), "aria-label": t("toggleCam") }, icon("cam"));
+
+  async function acquire(): Promise<MediaStream | null> {
+    const cams = (await listAudioVideoDevices().catch(() => ({ cams: [], mics: [] }))).cams;
+    const mics = (await listAudioVideoDevices().catch(() => ({ cams: [], mics: [] }))).mics;
+    const camId = pickDevice(cams, localStorage.getItem("visio:camId"));
+    const micId = pickDevice(mics, localStorage.getItem("visio:micId"));
+    const video: MediaTrackConstraints = {
+      ...(camId ? { deviceId: { exact: camId } } : {}),
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+    };
+    const audio: MediaTrackConstraints = {
+      ...(micId ? { deviceId: { exact: micId } } : {}),
+      echoCancellation: true,
+      noiseSuppression: true,
+    };
+    try {
+      return await navigator.mediaDevices.getUserMedia({ video, audio });
+    } catch {
+      try {
+        return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  stream = await acquire();
+  if (stream) preview.srcObject = stream;
+
+  const camSelect = el("select", { class: "device-select", "aria-label": t("selectCamera") });
+  const micSelect = el("select", { class: "device-select", "aria-label": t("selectMic") });
+
+  async function populateDevices(): Promise<void> {
+    const { cams, mics } = await listAudioVideoDevices().catch(() => ({ cams: [], mics: [] }));
+    if (cams.length > 1 || localStorage.getItem("visio:camId")) {
+      camSelect.replaceChildren();
+      const savedCam = localStorage.getItem("visio:camId");
+      cams.forEach((d, i) => {
+        const o = el("option", { value: d.deviceId }, deviceLabel(d, i));
+        if (d.deviceId === (savedCam ?? stream?.getVideoTracks()[0]?.getSettings().deviceId)) o.selected = true;
+        camSelect.append(o);
+      });
+      camSelect.classList.remove("hidden");
+    }
+    if (mics.length > 1 || localStorage.getItem("visio:micId")) {
+      micSelect.replaceChildren();
+      const savedMic = localStorage.getItem("visio:micId");
+      mics.forEach((d, i) => {
+        const o = el("option", { value: d.deviceId }, deviceLabel(d, i));
+        if (d.deviceId === (savedMic ?? stream?.getAudioTracks()[0]?.getSettings().deviceId)) o.selected = true;
+        micSelect.append(o);
+      });
+      micSelect.classList.remove("hidden");
+    }
+  }
+  void populateDevices();
+
+  async function switchDevice(kind: "cam" | "mic", deviceId: string): Promise<void> {
+    localStorage.setItem(kind === "cam" ? "visio:camId" : "visio:micId", deviceId);
+    stream?.getTracks().forEach((tr) => tr.stop());
+    stream = await acquire();
+    preview.srcObject = stream;
+  }
+  camSelect.onchange = () => void switchDevice("cam", camSelect.value);
+  micSelect.onchange = () => void switchDevice("mic", micSelect.value);
+
   micBtn.onclick = () => {
     micOn = !micOn;
     micBtn.classList.toggle("off", !micOn);
@@ -261,7 +319,8 @@ async function renderPreJoin(roomId: string): Promise<void> {
     el("main", { class: "prejoin" },
       el("div", { class: "top-bar" }, langSelector(), themeToggleButton()),
       el("div", { class: "preview-wrap" }, preview),
-      el("div", { class: "card row" },
+      el("div", { class: "card" },
+        el("div", { class: "row gap full" }, camSelect, micSelect),
         nameInput,
         el("div", { class: "row gap" }, micBtn, camBtn),
         joinBtn
@@ -331,7 +390,12 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   }
 
   const peerNames = new Map<string, string>();
-  const client = new RoomClient(wsUrl("/ws"), roomId, displayName);
+  const iceServers = await fetch(apiUrl("/api/rtc-config"))
+    .then((r) => r.json() as Promise<{ iceServers: IceServer[] }>)
+    .then((d) => d.iceServers ?? [])
+    .catch(() => [] as IceServer[]);
+
+  const client = new RoomClient(wsUrl("/ws"), roomId, displayName, iceServers);
   // Debug hook: append ?debug to inspect transports/consumers from the console.
   if (new URLSearchParams(location.search).has("debug")) {
     (window as unknown as { __room: RoomClient }).__room = client;
@@ -390,14 +454,36 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   };
 
   // ---- Local media + self view ----
-  const localStream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      width: { ideal: Math.min(currentProfile.maxHeight ? (currentProfile.maxHeight * 16) / 9 : 3840, 3840) },
-      height: { ideal: currentProfile.maxHeight ?? 2160 },
-      frameRate: { ideal: currentProfile.maxFps ?? 60 },
-    },
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-  });
+  const savedCamId = localStorage.getItem("visio:camId");
+  const savedMicId = localStorage.getItem("visio:micId");
+  const localStream = await navigator.mediaDevices
+    .getUserMedia({
+      video: {
+        ...(savedCamId ? { deviceId: { exact: savedCamId } } : {}),
+        width: {
+          ideal: Math.min(currentProfile.maxHeight ? (currentProfile.maxHeight * 16) / 9 : 3840, 3840),
+        },
+        height: { ideal: currentProfile.maxHeight ?? 2160 },
+        frameRate: { ideal: currentProfile.maxFps ?? 60 },
+      },
+      audio: {
+        ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    })
+    .catch(() =>
+      // Saved device may be gone; retry with defaults.
+      navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
+        },
+        audio: true,
+      })
+    );
 
   const selfTile = tileFor("self", "cam", `${displayName} (${t("you")})`);
   selfTile.video.srcObject = new MediaStream(localStream.getVideoTracks());
@@ -511,6 +597,11 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     setIconControl(boardBtn, !open, "pen");
   };
 
+  // ---- Reconnect banner ----
+  const banner = el("div", { class: "reconnect-banner hidden" }, t("reconnecting"));
+  client.signal.onConnectionLost = () => banner.classList.remove("hidden");
+  client.signal.onRestored = () => banner.classList.add("hidden");
+
   // ---- Idle fade ----
   let idleTimer = 0;
   const wake = (): void => {
@@ -535,6 +626,7 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
         leaveBtn
       )
     ),
+    banner,
     chat.root
   );
 

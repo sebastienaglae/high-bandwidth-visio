@@ -43,6 +43,7 @@ export const config = {
     maxDataProducersPerPeer: 3,
     maxDataConsumersPerPeer: 32,
     signalingMsgsPerSec: 60,
+    resumeGraceMs: Number(process.env.RESUME_GRACE_MS || 15_000),
     maxWbOps: 1500,
     speedtestCooldownMs: Number(process.env.SPEEDTEST_COOLDOWN_MS || 30_000),
     maxSpeedtestBytes: 256_000_000,

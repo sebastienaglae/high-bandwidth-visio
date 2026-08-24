@@ -5,6 +5,7 @@ import type {
   ConsumerOptions,
   ModeProfile,
   WBOp,
+  IceServer,
 } from "@visio/shared";
 import { Signal } from "./signal.js";
 
@@ -41,6 +42,7 @@ export class RoomClient {
   private screens = new Map<string, ScreenShare>();
   private consumers = new Map<string, ConsumerEntry>(); // key: producerId
   private appDp: types.DataProducer | null = null;
+  private consumedDp = new Set<string>();
   localStream: MediaStream | null = null;
   /** Set once join() succeeds. */
   peerId = "";
@@ -59,10 +61,70 @@ export class RoomClient {
   constructor(
     readonly wsUrl: string,
     readonly roomId: string,
-    readonly displayName: string
+    readonly displayName: string,
+    readonly iceServers: IceServer[] = []
   ) {
     this.signal = new Signal(wsUrl);
     this.signal.onPush((push) => this.handlePush(push));
+    this.signal.onResume = async () => {
+      const snap = (await this.signal.request("resume", {
+        peerId: this.peerId,
+      })) as unknown as {
+        peers: { peerId: string; displayName: string }[];
+        producers: { producerId: string }[];
+        dataProducers: { dataProducerId: string; label: string }[];
+        wbOps: WBOp[];
+      };
+      await this.reconcile(snap);
+    };
+  }
+
+  /**
+   * Reconcile client state with the server snapshot after a resume:
+   * media transports never died, so we only re-sync the room view.
+   */
+  private async reconcile(snap: {
+    peers: { peerId: string; displayName: string }[];
+    producers: { producerId: string }[];
+    dataProducers: { dataProducerId: string; label: string }[];
+    wbOps: WBOp[];
+  }): Promise<void> {
+    // Peers: drop leavers (tiles), announce joiners (names).
+    const valid = new Set(snap.peers.map((p) => p.peerId));
+    for (const id of [...this.knownPeers()]) {
+      if (!valid.has(id)) {
+        this.onPeerLeft?.(id);
+      }
+    }
+    for (const p of snap.peers) {
+      if (!this.knownPeers().has(p.peerId)) this.onPeerJoined?.(p.peerId, p.displayName);
+    }
+
+    // Media consumers.
+    const validProducers = new Set(snap.producers.map((p) => p.producerId));
+    for (const pid of [...this.consumers.keys()]) {
+      if (!validProducers.has(pid)) this.removeConsumersOf(pid);
+    }
+    for (const p of snap.producers) {
+      if (!this.consumers.has(p.producerId)) await this.consume(p.producerId);
+    }
+
+    // Data channels.
+    for (const dp of snap.dataProducers) {
+      if (dp.label === "app" && !this.consumedDp.has(dp.dataProducerId)) {
+        await this.consumeData(dp.dataProducerId);
+      }
+    }
+
+    // Whiteboard: rebuild from the authoritative snapshot.
+    this.onWbOps?.([{ k: "clear" }, ...snap.wbOps]);
+  }
+
+  private knownPeers(): Set<string> {
+    // Consumers reveal which peers we currently render.
+    const s = new Set<string>();
+    for (const entry of this.consumers.values()) s.add(entry.peerId);
+    return s;
   }
 
   async join(): Promise<void> {
@@ -104,6 +166,7 @@ export class RoomClient {
       iceCandidates: params.iceCandidates as never,
       dtlsParameters: params.dtlsParameters as never,
       sctpParameters: params.sctpParameters as never,
+      iceServers: this.iceServers as never,
     };
 
     const transport =
@@ -266,6 +329,7 @@ export class RoomClient {
     dc.on("message", (data: unknown) => {
       this.onAppMessage?.(d.peerId, data as AppData);
     });
+    this.consumedDp.add(dataProducerId);
   }
 
   setTrackEnabled(kind: "audio" | "video", enabled: boolean): void {

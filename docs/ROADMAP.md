@@ -5,7 +5,7 @@ would be natural next milestones.
 
 ## Media & quality
 
-- [ ] Device pickers — choose camera/mic/output; handle hot-plug
+- [x] Device pickers — choose camera/mic on the pre-join screen; saved per browser
 - [ ] Virtual backgrounds & blur via WebGPU (client-side, zero server cost)
 - [ ] AV1 encode path + SVC (L3T3_KEY) end-to-end; codec preference UI
 - [ ] Active-speaker detection (audio-level observer) + spotlight layout
@@ -19,9 +19,8 @@ would be natural next milestones.
 
 ## Connection & resilience
 
-- [ ] Automatic reconnection: ICE restarts, transport replacement, session
-      resume after WS drop (currently a dropped WS ends the call)
-- [ ] TURN/COTURN deployment profile for symmetric-NAT participants
+- [x] Automatic reconnection: WS auto-resume with 15 s server-side grace window, exponential backoff, state reconciliation (media keeps flowing during the drop)
+- [x] TURN/COTURN deployment profile (compose profile "turn", ICE_SERVERS / TURN_* env, `/api/rtc-config`)
 - [ ] Multi-SFU cascading (PipeTransport) + regional SFU selection by RTT
 - [ ] Pre-join bandwidth test to pick the default mode automatically
 - [ ] TCP/TLS fallback (mediasoup listens on TCP already) for UDP-blocked networks
@@ -65,7 +64,7 @@ would be natural next milestones.
 
 ## Operations
 
-- [ ] CI: GitHub Actions — typecheck, tests, web build, Docker build on tag
+- [x] CI: GitHub Actions — typecheck, tests, web build, Docker image builds
 - [ ] Prometheus `/metrics` (rooms, peers, bitrates, worker CPU) + Grafana board
 - [ ] Structured logging (pino) with levels + request IDs
 - [ ] Load harness: headless bot participants publishing fake media
@@ -80,3 +79,4 @@ would be natural next milestones.
 - [ ] More languages; RTL support; i18n for server-generated strings
 - [ ] Sound: join/leave chimes, mute-state audio cues
 - [ ] Connection-quality indicator per tile (from consumer score)
+

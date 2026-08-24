@@ -37,14 +37,33 @@ class FakeWebSocket {
 
 vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
 
-beforeEach(() => FakeWebSocket.instances.length === 0);
+const liveSignals: Signal[] = [];
+
+beforeEach(() => {
+  FakeWebSocket.instances.length = 0;
+});
+
+afterEach(() => {
+  // Prevent background reconnect timers from leaking into later tests.
+  for (const s of liveSignals.splice(0)) s.close();
+});
+
+/** Poll until the condition holds (vi.waitFor is throw-based, not truthy-based). */
+async function until(cond: () => boolean, timeout = 3000): Promise<void> {
+  const start = Date.now();
+  while (!cond()) {
+    if (Date.now() - start > timeout) throw new Error("condition not met within timeout");
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
 afterEach(() => {
   FakeWebSocket.instances.length = 0;
 });
 
 function makeSignal(): { signal: Signal; ws: FakeWebSocket } {
   const signal = new Signal("ws://test/ws");
-  const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+  liveSignals.push(signal);
+  const ws = FakeWebSocket.instances.at(-1)!;
   ws.open();
   return { signal, ws };
 }
@@ -64,10 +83,14 @@ describe("Signal RPC", () => {
 
   it("requestIds increment across calls", async () => {
     const { signal, ws } = makeSignal();
-    void signal.request("a");
-    void signal.request("b");
+    const pa = signal.request("a");
+    const pb = signal.request("b");
     expect(JSON.parse(ws.sent[0]).requestId).toBe(1);
     expect(JSON.parse(ws.sent[1]).requestId).toBe(2);
+    ws.emit({ type: "response", requestId: 1, data: {} });
+    ws.emit({ type: "response", requestId: 2, data: {} });
+    await expect(pa).resolves.toEqual({});
+    await expect(pb).resolves.toEqual({});
   });
 
   it("rejects the matching request on server error", async () => {
@@ -106,17 +129,86 @@ describe("Signal RPC", () => {
   it("rejects all pending when the socket closes", async () => {
     const { signal, ws } = makeSignal();
     const p = signal.request("slow");
-    ws.close();
+    signal.close(); // manual close: rejects pending without reconnect timers
+    void ws;
     await expect(p).rejects.toThrow("connection closed");
   });
 
   it("resolves opened once the socket is live", async () => {
-    const s2 = new Signal("ws://test2/ws");
+    const s2 = new Signal("ws://test2/ws"); liveSignals.push(s2);
     const w2 = FakeWebSocket.instances.at(-1)!;
-    const done = vi.fn();
-    s2.opened.then(done);
-    expect(done).not.toHaveBeenCalled();
+    let done = false;
+    s2.opened.then(() => (done = true));
+    expect(done).toBe(false);
     w2.open();
-    await vi.waitFor(() => expect(done).toHaveBeenCalled());
+    await until(() => done);
+  });
+
+  it("reconnects after an unexpected drop and runs the resume hook", async () => {
+    const s = new Signal("ws://test3/ws"); liveSignals.push(s);
+    let w = FakeWebSocket.instances.at(-1)!;
+    w.open();
+    let lost = 0;
+    let restored = 0;
+    let resumeRequests = 0;
+    s.onConnectionLost = () => lost++;
+    s.onRestored = () => restored++;
+    s.onResume = async () => {
+      resumeRequests++;
+      await s.request("resume", { peerId: "p1" });
+    };
+
+    // Drop: reconnect loop should create a NEW socket after backoff.
+    w.close();
+    await until(() => FakeWebSocket.instances.length === 2);
+    w = FakeWebSocket.instances[1];
+    // The resume request is sent as soon as the new socket opens.
+    w.open();
+    await until(() => resumeRequests === 1);
+    // Answer the resume request.
+    const frame = JSON.parse(w.sent[0]);
+    expect(frame.type).toBe("resume");
+    expect(frame.peerId).toBe("p1");
+    w.emit({ type: "response", requestId: frame.requestId, data: { peers: [], producers: [] } });
+    await until(() => restored === 1);
+    expect(lost).toBe(1);
+
+    // Requests flow again over the new socket.
+    const p = s.request("ping");
+    w.emit({ type: "response", requestId: JSON.parse(w.sent.at(-1)!).requestId, data: {} });
+    await expect(p).resolves.toEqual({});
+  });
+
+  it("does not reconnect after an explicit close()", async () => {
+    const s = new Signal("ws://test4/ws"); liveSignals.push(s);
+    FakeWebSocket.instances.at(-1)!.open();
+    const before = FakeWebSocket.instances.length;
+    s.close();
+    await new Promise((r) => setTimeout(r, 1200)); // > first backoff (500ms)
+    expect(FakeWebSocket.instances.length).toBe(before);
+  });
+
+  it("gives up after the retry budget and stays in the lost state", async () => {
+    vi.useFakeTimers();
+    try {
+      const s = new Signal("ws://test5/ws"); liveSignals.push(s);
+      FakeWebSocket.instances.at(-1)!.open();
+      const before = FakeWebSocket.instances.length;
+      let lost = 0;
+      s.onConnectionLost = () => lost++;
+      FakeWebSocket.instances.at(-1)!.close();
+      // Backoff doubles: 500,1000,2000,4000,8000... total for 8 retries > 25s
+      for (let i = 0; i < 30; i++) {
+        await vi.advanceTimersByTimeAsync(2000);
+        const latest = FakeWebSocket.instances.at(-1)!;
+        if (latest.readyState === 0) latest.close(); // every reconnect fails
+      }
+      const attempts = FakeWebSocket.instances.length - before;
+      expect(attempts).toBeLessThanOrEqual(9); // retry budget respected
+      expect(lost).toBe(1); // reported once, not per attempt
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
+

@@ -325,6 +325,37 @@ input:focus { border-color: var(--accent); }
 
 .controls-group { display: flex; gap: 4px; }
 
+.reconnect-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  z-index: 200;
+  box-shadow: var(--shadow);
+  transition: opacity 0.3s ease;
+}
+.reconnect-banner.hidden { opacity: 0; pointer-events: none; }
+
+.device-select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 9px 10px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  outline: none;
+}
+.device-select:focus { border-color: var(--accent); }
+.device-select.hidden { display: none; }
+
 /* ---------- Network panel ---------- */
 
 .net-panel {

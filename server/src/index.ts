@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { handleConnection } from "./signaling.js";
 import { randomRoomToken } from "./ids.js";
 import { RateLimiter } from "./ratelimit.js";
+import { buildIceServers } from "./ice.js";
 
 // ---- Boot validation ----
 if (config.isProd && config.listenIp === "0.0.0.0" && !config.announcedIp) {
@@ -48,6 +49,11 @@ const server = http.createServer((req, res) => {
   if (req.url === "/api/new-room") {
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
     res.end(JSON.stringify({ roomId: randomRoomToken() }));
+    return;
+  }
+  if (req.url === "/api/rtc-config") {
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(JSON.stringify({ iceServers: buildIceServers() }));
     return;
   }
   if (req.method === "GET" && req.url?.startsWith("/api/speedtest")) {

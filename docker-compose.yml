@@ -46,3 +46,19 @@ services:
       - "443:443"
     depends_on:
       - visio-server
+
+  # Optional TURN server for participants behind symmetric NATs.
+  # Start with: docker compose --profile turn up -d
+  # Then set in .env:
+  #   TURN_URLS=turn:<vps-ip>:3478?transport=udp,turn:<vps-ip>:3478?transport=tcp
+  #   TURN_USERNAME=visio
+  #   TURN_CREDENTIAL=<same static-auth-secret value>
+  coturn:
+    image: coturn/coturn:latest
+    profiles: ["turn"]
+    restart: unless-stopped
+    network_mode: host
+    command: >
+      -n --realm=visio --fingerprint
+      --lt-cred-mech --static-auth-secret=${TURN_CREDENTIAL:-change-me}
+      --no-multicast-peers --no-cli

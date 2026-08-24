@@ -107,7 +107,8 @@ export type ClientMessage =
   | ProduceDataRequest
   | ConsumeDataRequest
   | WbOpRequest
-  | WbClearRequest;
+  | WbClearRequest
+  | ResumeRequest;
 
 // ---- Server -> Client (requests/responses + events) ----
 
@@ -307,6 +308,22 @@ export interface RouteWatchRequest {
 
 export interface PingRequest {
   type: "ping";
+}
+
+/** Resume a dropped session: media keeps flowing during the grace window. */
+export interface ResumeRequest {
+  type: "resume";
+  peerId: string;
+}
+
+export interface IceServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
+export interface RtcConfig {
+  iceServers: IceServer[];
 }
 
 export interface WelcomePush {
