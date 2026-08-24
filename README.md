@@ -33,6 +33,8 @@ like Nice–Osaka).
 | *Collaborative whiteboard* | *Network panel — RTT, throughput, traceroute* |
 | ![Pre-join](docs/screenshots/prejoin.png) | ![Dark mode](docs/screenshots/landing-dark.png) |
 | *Pre-join device check* | *Dark theme* |
+| ![Speaker layout](docs/screenshots/layout-speaker.png) | |
+| *Speaker layout — pin a participant* | |
 
 See [FEATURES.md](docs/FEATURES.md) for a full page-by-page inventory, and
 [ROADMAP.md](docs/ROADMAP.md) for planned enhancements.
@@ -102,3 +104,4 @@ channels and are never persisted. See [SECURITY.md](SECURITY.md).
 ## License
 
 [MIT](LICENSE)
+

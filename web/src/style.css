@@ -279,6 +279,25 @@ input:focus { border-color: var(--accent); }
   align-content: start;
 }
 
+/* Speaker layout: dominant tile fills the top, rest in a filmstrip. */
+.grid.layout-speaker {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.grid.layout-speaker .tile.dominant {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  aspect-ratio: auto;
+  min-height: 0;
+}
+
+.grid.layout-speaker .tile:not(.dominant) {
+  aspect-ratio: 16 / 10;
+  width: 220px;
+  justify-self: start;
+}
+
 .tile {
   position: relative;
   background: var(--surface-video);

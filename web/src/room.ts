@@ -145,6 +145,7 @@ export class RoomClient {
       displayName: this.displayName,
     })) as unknown as {
       rtpCapabilities: RtpCapabilities;
+      peers: { peerId: string; displayName: string }[];
       producers: { peerId: string; producerId: string }[];
       dataProducers?: { peerId: string; dataProducerId: string; label: string }[];
       wbOps?: WBOp[];
@@ -153,15 +154,18 @@ export class RoomClient {
     this.peerId = (joined as unknown as { peerId?: string }).peerId ?? "";
     this.role = ((joined as unknown as { role?: Role }).role ?? "guest") as Role;
     this.hostPeerId = (joined as unknown as { hostPeerId?: string }).hostPeerId ?? "";
-    this.role = ((joined as unknown as { role?: Role }).role ?? "guest") as Role;
+
+    // Register snapshot peers first so tiles get real names.
+    for (const p of joined.peers) {
+      this.onPeerJoined?.(p.peerId, p.displayName);
+    }
 
     await this.device.load({ routerRtpCapabilities: joined.rtpCapabilities as never });
 
     // Consume anything already being published in the room.
     for (const p of joined.producers) {
       await this.consume(p.producerId);
-    }
-    // Attach to existing app data channels (chat / files).
+    }    // Attach to existing app data channels (chat / files).
     for (const dp of joined.dataProducers ?? []) {
       if (dp.label === "app") await this.consumeData(dp.dataProducerId);
     }

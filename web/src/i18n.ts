@@ -37,6 +37,10 @@ const EN = {
   cancelTransfer: "Cancel transfer",
   transferCancelled: "Transfer cancelled",
   dropFiles: "Drop files to share them",
+  layoutSpeaker: "Speaker view",
+  layoutGrid: "Grid view",
+  pin: "Pin participant",
+  unpin: "Unpin",
   host: "Host",
   mutePeer: "Mute participant",
   kickPeer: "Remove participant",
@@ -122,6 +126,10 @@ const FR: Dict = {
   cancelTransfer: "Annuler le transfert",
   transferCancelled: "Transfert annulé",
   dropFiles: "Déposez des fichiers pour les partager",
+  layoutSpeaker: "Vue conférencier",
+  layoutGrid: "Vue grille",
+  pin: "Épingler le participant",
+  unpin: "Détacher",
   host: "Hôte",
   mutePeer: "Couper le micro du participant",
   kickPeer: "Retirer le participant",
@@ -201,6 +209,10 @@ const JA: Dict = {
   cancelTransfer: "転送をキャンセル",
   transferCancelled: "転送がキャンセルされました",
   dropFiles: "ファイルをドロップして共有",
+  layoutSpeaker: "スピーカービュー",
+  layoutGrid: "グリッドビュー",
+  pin: "ピン留め",
+  unpin: "ピン解除",
   host: "ホスト",
   mutePeer: "参加者のマイクをオフ",
   kickPeer: "参加者を退出させる",
@@ -296,6 +308,7 @@ export const MODE_LABELS: Record<Lang, Record<string, string>> = {
   fr: { ultra: "Ultra", low: "Bas", balanced: "Équilibré", high: "Haut", max: "Max" },
   ja: { ultra: "超低遅延", low: "低遅延", balanced: "バランス", high: "高画質", max: "最高" },
 };
+
 
 
 

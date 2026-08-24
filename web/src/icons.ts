@@ -68,6 +68,16 @@ const PATHS: Record<string, string> = {
     '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/>',
   stop:
     '<rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none"/>',
+  grid:
+    '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/>' +
+    '<rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>',
+  speaker:
+    '<rect x="3" y="3" width="13" height="18" rx="2"/>' +
+    '<rect x="18" y="3" width="3" height="8" rx="1"/>' +
+    '<rect x="18" y="13" width="3" height="8" rx="1"/>',
+  pin:
+    '<path d="M12 17v5"/>' +
+    '<path d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.3V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.7a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/>',
 };
 
 export function icon(name: keyof typeof PATHS | string, size = 18): SVGSVGElement {

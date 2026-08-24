@@ -8,8 +8,8 @@ would be natural next milestones.
 - [x] Device pickers — choose camera/mic on the pre-join screen; saved per browser
 - [ ] Virtual backgrounds & blur via WebGPU (client-side, zero server cost)
 - [ ] AV1 encode path + SVC (L3T3_KEY) end-to-end; codec preference UI
-- [ ] Active-speaker detection (audio-level observer) + spotlight layout
-- [ ] Layout modes: grid / speaker / filmstrip; pin & mute-others (host)
+- [x] Active-speaker detection (audio-level observer) + tile highlight; speaker layout with pin
+- [x] Layout modes: grid / speaker (dominant + filmstrip); pin (host mute-others done via moderation)
 - [x] Local recording (MediaRecorder → WebM download + chat chip) — server-side recording still open
 - [ ] RTMP/streaming output for webinars
 - [ ] Hi-fi audio mode: 5.1 Opus, no DTX, full-band stereo music
@@ -75,7 +75,8 @@ would be natural next milestones.
 - [ ] Mobile/responsive layout + PWA manifest (installable, wakelock)
 - [ ] OpenGraph preview image on invite links (server-rendered meta)
 - [ ] More languages; RTL support; i18n for server-generated strings
-- [ ] Sound: join/leave chimes, mute-state audio cues
+- [x] Sound: join/leave chimes, mute-state audio cues (WebAudio, no assets)
 - [ ] Connection-quality indicator per tile (from consumer score)
+
 
 

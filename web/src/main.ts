@@ -12,6 +12,8 @@ import {
 } from "./env.js";
 import { t, setLang, getLang, allLangs, MODE_LABELS } from "./i18n.js";
 import { listAudioVideoDevices, pickDevice, deviceLabel } from "./devices.js";
+import { pickDominant } from "./layout.js";
+import { playCue } from "./audio.js";
 import { MODE_PROFILES, MODES } from "@visio/shared";
 import type { Mode, WBOp, IceServer } from "@visio/shared";
 import "./style.css";
@@ -336,6 +338,7 @@ interface Tile {
   video: HTMLVideoElement;
   audio: HTMLAudioElement | null;
   label: HTMLDivElement;
+  labelText: HTMLSpanElement;
 }
 
 async function startRoom(roomId: string, displayName: string): Promise<void> {
@@ -373,10 +376,11 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     if (!tile) {
       const video = el("video", { autoplay: "", playsinline: "" });
       applyJitter(video as never);
-      const label = el("div", { class: "label" }, labelText);
+      const textSpan = el("span", { class: "label-text" }, labelText);
+      const label = el("div", { class: "label" }, textSpan);
       const root = el("div", { class: "tile" }, video, label);
       grid.append(root);
-      tile = { root, video, audio: null, label };
+      tile = { root, video, audio: null, label, labelText: textSpan };
       tiles.set(key, tile);
     }
     return tile;
@@ -400,6 +404,8 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   // Debug hook: append ?debug to inspect transports/consumers from the console.
   if (new URLSearchParams(location.search).has("debug")) {
     (window as unknown as { __room: RoomClient }).__room = client;
+    (window as unknown as { __names: Map<string, string> }).__names = peerNames;
+    (window as unknown as { __host: () => string }).__host = () => hostPeerId;
   }
 
   client.onRemoteStream = (s: RemoteStream) => {
@@ -427,37 +433,60 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
       tile.root.append(audio);
       tile.audio = audio;
     }
+
+    // Pin button on every tile.
+    const fullKey = tileKey(s.peerId, s.key);
+    if (!tile.label.querySelector(".pin-btn")) {
+      const pin = el("button", { class: "label-btn pin-btn", title: t("pin"), "aria-label": t("pin") });
+      pin.replaceChildren(icon("pin", 12));
+      pin.onclick = (e) => {
+        e.stopPropagation();
+        pinnedKey = pinnedKey === fullKey ? null : fullKey;
+        const pinning = pinnedKey === fullKey;
+        pin.title = pinning ? t("unpin") : t("pin");
+        if (layout === "grid" && pinning) {
+          layout = "speaker";
+          localStorage.setItem("visio:layout", layout);
+          renderLayoutBtn();
+        }
+        applyLayout();
+      };
+      tile.label.append(pin);
+    }
+    applyLayout();
   };
 
   client.onRemoteStreamRemoved = (peerId, source, _kind, producerId) => {
     removeTile(tileKey(peerId, source === "screen" ? `screen:${producerId}` : "cam"));
+    if (pinnedKey && !tiles.has(pinnedKey)) pinnedKey = null;
+    applyLayout();
   };
 
   function relabel(peerId: string): void {
     for (const [key, tile] of tiles) {
       if (!key.startsWith(`${peerId}:`)) continue;
-      const isSelf = peerId === client.peerId;
+      const isSelf = peerId === client.peerId || peerId === "self";
       const name = isSelf ? `${displayName} (${t("you")})` : peerNames.get(peerId) ?? t("guest");
       const suffix = key.includes(":screen:") ? ` — ${t("screenSuffix")}` : "";
-      const hostTag = hostPeerId === peerId ? `${t("host")} · ` : "";
-      tile.label.textContent = `${hostTag}${name}${suffix}`;
+      const hostTag = hostPeerId === peerId || (isSelf && hostPeerId === client.peerId) ? `${t("host")} · ` : "";
+      tile.labelText.textContent = `${hostTag}${name}${suffix}`;
       rebuildTileActions(peerId, key, tile, isSelf);
     }
   }
 
   /** Host-only per-tile moderation buttons on remote camera tiles. */
   function rebuildTileActions(peerId: string, key: string, tile: Tile, isSelf: boolean): void {
-    tile.label.querySelectorAll("button").forEach((b) => b.remove());
+    tile.label.querySelectorAll(".mod-btn").forEach((b) => b.remove());
     if (isSelf || key.includes(":screen:")) return;
     if (hostPeerId !== client.peerId || client.peerId === "") return;
 
-    const muteBtn = el("button", { class: "label-btn", title: t("mutePeer"), "aria-label": t("mutePeer") });
+    const muteBtn = el("button", { class: "label-btn mod-btn", title: t("mutePeer"), "aria-label": t("mutePeer") });
     muteBtn.replaceChildren(icon("mic-off", 12));
     muteBtn.onclick = (e) => {
       e.stopPropagation();
       void client.signal.request("moderate", { action: "mute", targetPeerId: peerId });
     };
-    const kickBtn = el("button", { class: "label-btn danger", title: t("kickPeer"), "aria-label": t("kickPeer") });
+    const kickBtn = el("button", { class: "label-btn mod-btn danger", title: t("kickPeer"), "aria-label": t("kickPeer") });
     kickBtn.replaceChildren(icon("x", 12));
     kickBtn.onclick = (e) => {
       e.stopPropagation();
@@ -479,14 +508,47 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     lockBtn.classList.toggle("hidden", hostPeerId !== client.peerId);
   };
 
-  client.onActiveSpeaker = (peerId) => {
+  // ---- Layout (grid / speaker) + pin ----
+  type LayoutMode = "grid" | "speaker";
+  let layout: LayoutMode = (localStorage.getItem("visio:layout") as LayoutMode) ?? "grid";
+  let pinnedKey: string | null = null;
+  let lastSpeakerKey: string | null = null;
+
+  const layoutBtn = el("button", { class: "control", "aria-label": "Layout" });
+  function renderLayoutBtn(): void {
+    layoutBtn.replaceChildren(icon(layout === "speaker" ? "speaker" : "grid"));
+    layoutBtn.title = layout === "speaker" ? t("layoutGrid") : t("layoutSpeaker");
+  }
+  layoutBtn.onclick = () => {
+    layout = layout === "speaker" ? "grid" : "speaker";
+    localStorage.setItem("visio:layout", layout);
+    renderLayoutBtn();
+    applyLayout();
+  };
+  renderLayoutBtn();
+
+  function applyLayout(): void {
+    grid.classList.toggle("layout-speaker", layout === "speaker");
+    grid.classList.toggle("layout-grid", layout === "grid");
+    const keys = [...tiles.keys()];
+    const dominant = layout === "speaker"
+      ? pickDominant({ pinned: pinnedKey, lastSpeaker: lastSpeakerKey, tiles: keys })
+      : null;
     for (const [key, tile] of tiles) {
-      const speaking = key === tileKey(peerId, "cam");
-      tile.root.classList.toggle("speaking", speaking);
-      if (speaking) {
-        window.setTimeout(() => tile.root.classList.remove("speaking"), 2000);
-      }
+      tile.root.classList.toggle("dominant", key === dominant);
+      tile.root.classList.toggle("pinned", key === pinnedKey);
     }
+  }
+
+  client.onActiveSpeaker = (peerId) => {
+    const key = tileKey(peerId, "cam");
+    if (tiles.has(key)) lastSpeakerKey = key;
+    for (const [k, tile] of tiles) {
+      const speaking = k === key;
+      tile.root.classList.toggle("speaking", speaking);
+      if (speaking) window.setTimeout(() => tile.root.classList.remove("speaking"), 2000);
+    }
+    if (layout === "speaker" && !pinnedKey) applyLayout();
   };
 
   client.onModerated = (action, by) => {
@@ -517,6 +579,7 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   client.onPeerJoined = (peerId, name) => {
     peerNames.set(peerId, name);
     relabel(peerId);
+    playCue("join");
   };
 
   client.onPeerLeft = (peerId) => {
@@ -524,6 +587,9 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
       if (key.startsWith(`${peerId}:`)) removeTile(key);
     }
     peerNames.delete(peerId);
+    if (pinnedKey && !tiles.has(pinnedKey)) pinnedKey = null;
+    applyLayout();
+    playCue("leave");
   };
 
   // ---- Local media + self view ----
@@ -602,7 +668,7 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   const netBtn = iconControl("activity", "activity", t("netDiagnostics"), false);
   const lockBtn = iconControl("lock", "unlock", t("lockRoom"), false);
   lockBtn.classList.add("hidden"); // guests never see it
-  const recBtn = iconControl("record", "stop", t("record"), false);
+  const recBtn = iconControl("stop", "record", t("record"), false);
   const leaveBtn = iconControl("leave", "leave", t("leave"), false, "danger");
   const roomMain = el("main", { class: "room" });
 
@@ -610,6 +676,7 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
     micOn = !micOn;
     setIconControl(micBtn, micOn, "mic", "mic-off");
     client.setTrackEnabled("audio", micOn);
+    playCue(micOn ? "unmute" : "mute");
   };
   camBtn.onclick = () => {
     camOn = !camOn;
@@ -755,7 +822,8 @@ async function startRoomInner(roomId: string, displayName: string): Promise<void
   roomMain.append(
     grid,
     board.overlay,
-    el("footer", { class: "controls" },
+      el("footer", { class: "controls" },
+      layoutBtn,
       modeBar,
       el("div", { class: "controls-group" },
         micBtn, camBtn, screenBtn, recBtn, chatBtn, boardBtn, copyBtn, netBtn, lockBtn,
@@ -1246,3 +1314,5 @@ if (path.startsWith("/j/")) {
 } else {
   renderLanding();
 }
+
+
