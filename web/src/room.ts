@@ -62,6 +62,7 @@ export class RoomClient {
   onPeerLeft: ((peerId: string) => void) | null = null;
   onAppMessage: ((peerId: string, data: AppData) => void) | null = null;
   onWbOps: ((ops: WBOp[]) => void) | null = null;
+  onWbUndo: ((strokeId: string) => void) | null = null;
   onRoleChanged: ((peerId: string, role: Role) => void) | null = null;
   onActiveSpeaker: ((peerId: string) => void) | null = null;
   onModerated: ((action: "mute", by: string) => void) | null = null;
@@ -486,6 +487,9 @@ export class RoomClient {
         break;
       case "wbOps":
         this.onWbOps?.(push.ops);
+        break;
+      case "wbUndo":
+        this.onWbUndo?.(push.id);
         break;
       case "roleChanged":
         if (push.role === "host") this.hostPeerId = push.peerId;

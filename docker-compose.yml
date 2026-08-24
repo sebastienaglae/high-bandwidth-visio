@@ -62,3 +62,30 @@ services:
       -n --realm=visio --fingerprint
       --lt-cred-mech --static-auth-secret=${TURN_CREDENTIAL:-change-me}
       --no-multicast-peers --no-cli
+
+  # Optional observability stack (Prometheus scrapes /metrics, Grafana plots it).
+  # Start with: docker compose --profile observability up -d
+  # Grafana on :3000 (admin/admin), Prometheus on :9091.
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["observability"]
+    restart: unless-stopped
+    volumes:
+      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+    depends_on:
+      - visio-server
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: ["observability"]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - ./ops/grafana-datasources.yml:/etc/grafana/provisioning/datasources/ds.yml:ro
+      - ./ops/grafana-dashboard.json:/etc/grafana/provisioning/dashboards/visio.json:ro
+      - ./ops/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+    ports:
+      - "3000:3000"

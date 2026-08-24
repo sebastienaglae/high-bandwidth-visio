@@ -29,8 +29,8 @@ would be natural next milestones.
 ## Chat, files, whiteboard
 
 - [x] File transfer progress bars, cancel, drag & drop (size cap via MAX_PEERS-style env is future work; image paste/preview pending)
-- [ ] Markdown rendering in chat (code blocks especially)
-- [ ] Whiteboard: shapes, text, eraser, undo/redo, multi-page, PNG/PDF export
+- [x] Markdown rendering in chat (bold/italic/inline code/fenced blocks/safe links)
+- [ ] Whiteboard: shapes, text, eraser, redo, multi-page, PNG/PDF export (undo done)
 - [ ] Whiteboard "laser pointer" mode and follow-the-presenter view
 - [ ] Optional message history persistence (off by default)
 
@@ -77,6 +77,7 @@ would be natural next milestones.
 - [ ] More languages; RTL support; i18n for server-generated strings
 - [x] Sound: join/leave chimes, mute-state audio cues (WebAudio, no assets)
 - [ ] Connection-quality indicator per tile (from consumer score)
+
 
 
 

@@ -14,6 +14,7 @@ import { t, setLang, getLang, allLangs, MODE_LABELS } from "./i18n.js";
 import { listAudioVideoDevices, pickDevice, deviceLabel } from "./devices.js";
 import { pickDominant } from "./layout.js";
 import { playCue } from "./audio.js";
+import { renderMarkdown } from "./markdown.js";
 import { MODE_PROFILES, MODES } from "@visio/shared";
 import type { Mode, WBOp, IceServer } from "@visio/shared";
 import "./style.css";
@@ -879,6 +880,7 @@ function setIconControl(btn: HTMLButtonElement, on: boolean, ..._rest: string[])
 interface FileIncoming {
   name: string;
   size: number;
+  mime: string;
   chunks: Uint8Array[];
   received: number;
 }
@@ -1025,6 +1027,17 @@ function buildChatPanel(
     return a;
   }
 
+  function imageChip(name: string, blobUrl: string, sizeLabel: string): HTMLElement {
+    const wrap = el("div", { class: "file-chip image-chip" });
+    const img = el("img", { src: blobUrl, alt: name }) as HTMLImageElement;
+    img.loading = "lazy";
+    const view = el("a", { href: blobUrl, target: "_blank", rel: "noopener" }, img);
+    const dl = el("a", { href: blobUrl, download: name }, t("download"));
+    dl.className = "image-dl";
+    wrap.append(view, el("span", {}, `${name} · ${sizeLabel}`), dl);
+    return wrap;
+  }
+
   function fmtSize(n: number): string {
     return n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} kB`;
   }
@@ -1035,12 +1048,24 @@ function buildChatPanel(
   }
 
   function addMessage(name: string, text: string, self: boolean): void {
+    const body = el("span", { class: "msg-body" });
+    body.innerHTML = renderMarkdown(text);
     const line = el("div", { class: `msg${self ? " self" : ""}` },
       el("span", { class: "msg-name" }, name),
-      el("span", {}, text)
+      body
     );
     addLine(line);
   }
+
+  // Image paste straight into the chat input.
+  input.addEventListener("paste", (e) => {
+    const files = Array.from(e.clipboardData?.files ?? []).filter((f) =>
+      f.type.startsWith("image/")
+    );
+    if (files.length === 0) return;
+    e.preventDefault();
+    for (const f of files) void sendFile(f);
+  });
 
   function addSystem(text: string): void {
     addLine(el("div", { class: "msg system" }, el("span", {}, text)));
@@ -1051,7 +1076,7 @@ function buildChatPanel(
   client.onAppMessage = (peerId, data) => {
     const name = peerNames.get(peerId) ?? t("guest");
     if (typeof data === "string") {
-      let env: { t?: string; name?: string; text?: string; ts?: number; id?: string; size?: number };
+      let env: { t?: string; name?: string; text?: string; ts?: number; id?: string; size?: number; mime?: string };
       try {
         env = JSON.parse(data);
       } catch {
@@ -1063,6 +1088,7 @@ function buildChatPanel(
         incomingFiles.set(env.id, {
           name: String(env.name ?? "file").slice(0, 120),
           size: Number(env.size ?? 0),
+          mime: String(env.mime ?? ""),
           chunks: [],
           received: 0,
         });
@@ -1071,12 +1097,16 @@ function buildChatPanel(
         const f = incomingFiles.get(env.id);
         const tr = transferRows.get(env.id);
         if (!f) return;
-        const blob = new Blob(f.chunks as BlobPart[]);
+        const blob = new Blob(f.chunks as BlobPart[], { type: f.mime || undefined });
         const url = URL.createObjectURL(blob);
         incomingFiles.delete(env.id);
         tr?.finish();
         transferRows.delete(env.id);
-        addLine(downloadChip(f.name, url, fmtSize(blob.size)));
+        if (f.mime.startsWith("image/")) {
+          addLine(imageChip(f.name, url, fmtSize(blob.size)));
+        } else {
+          addLine(downloadChip(f.name, url, fmtSize(blob.size)));
+        }
       } else if (env.t === "fcancel" && env.id) {
         incomingFiles.delete(env.id);
         transferRows.get(env.id)?.remove();
@@ -1146,9 +1176,12 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
     toolbar.append(b);
   }
 
+  const undoBtn = el("button", { class: "control small", title: "Ctrl+Z", "aria-label": "Undo" }, icon("undo", 15));
+  undoBtn.onclick = () => undoMyLast();
   const clearBtn = el("button", { class: "control small", title: t("boardClear") }, icon("trash", 15));
   clearBtn.onclick = () => {
     history.length = 0;
+    myStrokeIds.length = 0;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     strokes.clear();
     void client.signal.request("wbClear");
@@ -1157,7 +1190,7 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
   closeBtn.onclick = () => {
     overlay.classList.add("hidden");
   };
-  toolbar.append(clearBtn, closeBtn);
+  toolbar.append(undoBtn, clearBtn, closeBtn);
 
   overlay.append(canvas, toolbar);
 
@@ -1223,6 +1256,39 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
   }
   client.onWbOps = applyOps;
 
+  /** Remove a stroke everywhere and replay the board from history. */
+  function undoStroke(id: string): void {
+    const filtered = history.filter(
+      (op) => (op.k === "start" ? op.s.id !== id : !("id" in op) || op.id !== id)
+    );
+    if (filtered.length === history.length) return;
+    history.length = 0;
+    history.push(...filtered);
+    strokes.clear();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const op of history) applyOp(op);
+  }
+  client.onWbUndo = undoStroke;
+
+  /** My stroke ids in draw order, for undo. */
+  const myStrokeIds: string[] = [];
+  function undoMyLast(): void {
+    const id = myStrokeIds.pop();
+    if (!id) return;
+    void client.signal.request("wbUndo", { id });
+    // The wbUndo push applies the change locally.
+  }
+
+  function undoShortcut(e: KeyboardEvent): void {
+    if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
+    const target = e.target as HTMLElement | null;
+    if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+    if (overlay.classList.contains("hidden")) return;
+    e.preventDefault();
+    undoMyLast();
+  }
+  window.addEventListener("keydown", undoShortcut);
+
   // Local drawing
   let drawing: LiveStroke | null = null;
   let drawingId = "";
@@ -1238,6 +1304,8 @@ function buildWhiteboard(client: RoomClient): { overlay: HTMLDivElement } {
   canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture(e.pointerId);
     drawingId = crypto.randomUUID();
+    myStrokeIds.push(drawingId);
+    if (myStrokeIds.length > 200) myStrokeIds.shift();
     const [x, y] = toLocal(e);
     drawing = { color, width, points: [x, y] };
     pendingPts = [x, y];

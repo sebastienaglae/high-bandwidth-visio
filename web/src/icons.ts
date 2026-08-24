@@ -78,6 +78,9 @@ const PATHS: Record<string, string> = {
   pin:
     '<path d="M12 17v5"/>' +
     '<path d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.3V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.7a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/>',
+  undo:
+    '<path d="M3 7v6h6"/>' +
+    '<path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>',
 };
 
 export function icon(name: keyof typeof PATHS | string, size = 18): SVGSVGElement {

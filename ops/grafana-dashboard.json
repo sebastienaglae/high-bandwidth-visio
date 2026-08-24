@@ -1,0 +1,51 @@
+{
+  "title": "visio",
+  "uid": "visio-overview",
+  "timezone": "browser",
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Rooms",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "visio_rooms" }]
+    },
+    {
+      "type": "stat",
+      "title": "Peers",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "visio_peers" }]
+    },
+    {
+      "type": "stat",
+      "title": "Producers",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "visio_producers" }]
+    },
+    {
+      "type": "stat",
+      "title": "Consumers",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "visio_consumers" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Peers per room",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "targets": [{ "expr": "visio_room_peers", "legendFormat": "{{room}}" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Heap (bytes)",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 7 },
+      "targets": [{ "expr": "visio_memory_heap_bytes" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Workers",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 7 },
+      "targets": [{ "expr": "visio_workers" }]
+    }
+  ],
+  "schemaVersion": 39
+}

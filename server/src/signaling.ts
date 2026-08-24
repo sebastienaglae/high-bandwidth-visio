@@ -434,6 +434,24 @@ async function handleMessage(
       break;
     }
 
+    case "wbUndo": {
+      const peer = requirePeer(session);
+      const room = requireRoom(peer);
+      const id = String(msg.id || "").slice(0, 64);
+      if (!id) throw new Error("invalid stroke id");
+      // Only the author of a stroke may undo it.
+      const isMine = room.wbOps.some(
+        (op) => op.k === "start" && op.s.id === id
+      );
+      if (!isMine) throw new Error("stroke not found");
+      room.wbOps = room.wbOps.filter(
+        (op) => !(op.k === "start" ? op.s.id === id : "id" in op && op.id === id)
+      );
+      room.broadcast({ type: "wbUndo", id });
+      respond(socket, requestId, {});
+      break;
+    }
+
     default:
       throw new Error(`unsupported message`);
   }

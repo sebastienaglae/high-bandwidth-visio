@@ -40,13 +40,18 @@ Every user-facing surface in visio, with the features it carries.
 
 ### Chat panel
 - Real-time messages over an SCTP data channel (no HTTP)
+- Markdown subset: **bold**, *italic*, inline code, fenced code blocks,
+  safe links (HTML-escaped, javascript: rejected)
+- Image paste into chat input; received images render as inline previews
 - Temporary file sharing: 60 KB binary frames, SCTP backpressure-aware, reassembled client-side into download chips — never persisted server-side
 - Sender/receiver naming, system lines for transfers
 
 ### Whiteboard overlay
 - Vector strokes, 5 colors, 3 widths, clear-all
 - Ops batched ~50 ms, server-validated (colors, normalized coords, caps)
-- Full history replay on resize; join-time snapshot from server (capped 1500 ops)
+-- Undo (button or Ctrl+Z) removes your last stroke everywhere, including
+  from the server-side snapshot; full history replay on resize; join-time
+  snapshot from server (capped 1500 ops)
 
 ### Network panel
 - RTT sparkline (WebSocket ping, 1 s cadence, 90-sample window)
@@ -93,5 +98,6 @@ Every user-facing surface in visio, with the features it carries.
 - Ephemeral rooms (closed when last participant leaves)
 - Rate limiting (60 signaling msg/s per connection, per-IP HTTP limits), capacity caps, security headers, graceful shutdown, production boot guard
 - `/healthz`, `/api/new-room`, `/api/speedtest`
+
 
 

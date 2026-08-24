@@ -108,6 +108,7 @@ export type ClientMessage =
   | ConsumeDataRequest
   | WbOpRequest
   | WbClearRequest
+  | WbUndoRequest
   | ResumeRequest
   | ModerateRequest;
 
@@ -191,6 +192,7 @@ export type ServerPush =
   | NewDataProducerEvent
   | DataProducerClosedEvent
   | WbOpsPush
+  | WbUndoPush
   | ActiveSpeakerPush
   | ModeratedPush
   | RoleChangedPush
@@ -417,6 +419,16 @@ export interface WbOpRequest {
 
 export interface WbClearRequest {
   type: "wbClear";
+}
+
+export interface WbUndoRequest {
+  type: "wbUndo";
+  id: string;
+}
+
+export interface WbUndoPush {
+  type: "wbUndo";
+  id: string;
 }
 
 export interface WbOpsPush {
