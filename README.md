@@ -34,6 +34,9 @@ like Nice–Osaka).
 | ![Pre-join](docs/screenshots/prejoin.png) | ![Dark mode](docs/screenshots/landing-dark.png) |
 | *Pre-join device check* | *Dark theme* |
 
+See [FEATURES.md](docs/FEATURES.md) for a full page-by-page inventory, and
+[ROADMAP.md](docs/ROADMAP.md) for planned enhancements.
+
 ## Structure
 
 | Path | What |
@@ -42,6 +45,7 @@ like Nice–Osaka).
 | `server/` | mediasoup SFU, WebSocket signaling, traceroute agent |
 | `web/` | Browser client (Vite + TypeScript, no framework) |
 | `desktop/` | Tauri desktop shell |
+| `docs/` | Feature inventory, roadmap |
 
 ## Development
 
