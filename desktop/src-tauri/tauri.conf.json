@@ -28,6 +28,12 @@
   "bundle": {
     "active": true,
     "targets": ["msi", "dmg"],
+    "android": {
+      "minSdkVersion": 24
+    },
+    "iOS": {
+      "minimumSystemVersion": "14.0"
+    },
     "icon": ["icons/icon.ico", "icons/icon.icns", "icons/icon.png"]
   }
 }

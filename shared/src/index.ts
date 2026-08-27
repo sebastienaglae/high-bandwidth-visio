@@ -325,6 +325,7 @@ export interface PingRequest {
 export interface ResumeRequest {
   type: "resume";
   peerId: string;
+  resumeToken: string;
 }
 
 export interface IceServer {

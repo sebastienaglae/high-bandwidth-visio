@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>NSCameraUsageDescription</key>
+    <string>visio needs camera access to share your video in meetings.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>visio needs microphone access to join meeting audio.</string>
+  </dict>
+</plist>

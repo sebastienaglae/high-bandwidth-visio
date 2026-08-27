@@ -54,6 +54,7 @@ export class RoomClient {
   hostPeerId = "";
   /** Our public IP as seen by the server (from the welcome push). */
   clientIp = "";
+  private resumeToken = "";
 
   onRemoteStream: ((s: RemoteStream, added: boolean) => void) | null = null;
   onRemoteStreamRemoved:
@@ -85,12 +86,15 @@ export class RoomClient {
     this.signal.onResume = async () => {
       const snap = (await this.signal.request("resume", {
         peerId: this.peerId,
+        resumeToken: this.resumeToken,
       })) as unknown as {
+        resumeToken?: string;
         peers: { peerId: string; displayName: string }[];
         producers: { producerId: string }[];
         dataProducers: { dataProducerId: string; label: string }[];
         wbOps: WBOp[];
       };
+      if (snap.resumeToken) this.resumeToken = snap.resumeToken;
       await this.reconcile(snap);
     };
   }
@@ -153,10 +157,13 @@ export class RoomClient {
       peers: { peerId: string; displayName: string }[];
       producers: { peerId: string; producerId: string }[];
       dataProducers?: { peerId: string; dataProducerId: string; label: string }[];
+      resumeToken?: string;
       wbOps?: WBOp[];
     };
 
     this.peerId = (joined as unknown as { peerId?: string }).peerId ?? "";
+    this.resumeToken =
+      (joined as unknown as { resumeToken?: string }).resumeToken ?? "";
     this.role = ((joined as unknown as { role?: Role }).role ?? "guest") as Role;
     this.hostPeerId = (joined as unknown as { hostPeerId?: string }).hostPeerId ?? "";
 

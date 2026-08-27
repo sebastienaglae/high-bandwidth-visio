@@ -1,0 +1,9 @@
+{
+  "identifier": "mobile",
+  "description": "Mobile capability for the visio meeting webview",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-fullscreen"
+  ]
+}

@@ -8,3 +8,7 @@ export function randomRoomToken(): string {
 export function newId(prefix: string): string {
   return `${prefix}-${randomBytes(8).toString("base64url")}`;
 }
+
+export function randomSessionToken(): string {
+  return randomBytes(32).toString("base64url");
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "visio",
+  "version": "0.1.0",
+  "identifier": "app.visio.mobile",
+  "build": {
+    "beforeDevCommand": "npm run dev -w web",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build -w web",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "iOS": {
+      "minimumSystemVersion": "14.0",
+      "infoPlist": "Info.plist"
+    }
+  }
+}

@@ -11,11 +11,12 @@ import type {
   TransportListenIp,
 } from "mediasoup/types";
 import { config } from "./config.js";
-import { randomRoomToken, newId } from "./ids.js";
+import { randomRoomToken, newId, randomSessionToken } from "./ids.js";
 
 export interface Peer {
   id: string;
   displayName: string;
+  resumeToken: string;
   socket: import("ws").WebSocket;
   transports: Map<string, WebRtcTransport>;
   producers: Map<string, Producer>;

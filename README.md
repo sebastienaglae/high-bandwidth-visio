@@ -71,6 +71,19 @@ npm run dev:desktop   # tauri dev
 npm run build:desktop # .msi / .dmg bundles
 ```
 
+Mobile apps (Android & iOS) reuse the same Tauri shell and web client.
+Initialize each native project on a host with the required SDKs:
+
+```bash
+npm run mobile:android:init # requires Android SDK + NDK
+npm run mobile:android:dev  # device or emulator
+npm run mobile:android:build
+
+npm run mobile:ios:init     # macOS + Xcode required
+npm run mobile:ios:dev
+npm run mobile:ios:build
+```
+
 ## Deployment
 
 See [DEPLOY.md](DEPLOY.md). Short version:

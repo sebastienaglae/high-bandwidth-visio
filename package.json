@@ -13,6 +13,12 @@
     "dev:web": "npm run dev -w web",
     "dev:desktop": "npm run dev -w desktop",
     "build:desktop": "npm run build -w desktop",
+    "mobile:android:init": "npm run android:init -w desktop",
+    "mobile:android:dev": "npm run android:dev -w desktop",
+    "mobile:android:build": "npm run android:build -w desktop",
+    "mobile:ios:init": "npm run ios:init -w desktop",
+    "mobile:ios:dev": "npm run ios:dev -w desktop",
+    "mobile:ios:build": "npm run ios:build -w desktop",
     "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w web",
     "test": "npm run test -w shared && npm run test -w server && npm run test -w web"
   },

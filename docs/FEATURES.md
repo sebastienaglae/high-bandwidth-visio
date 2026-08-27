@@ -92,14 +92,21 @@ Every user-facing surface in visio, with the features it carries.
 - Optional TURN relay (`/api/rtc-config`, compose profile `turn`) for
   symmetric-NAT participants
 
-## 4. Desktop app (Tauri v2 — Windows / macOS)
+## 4. Mobile apps (Tauri v2 — Android / iOS)
+
+- Native window, GPU-accelerated WebView, perf browser flags
+- Browser media stack in the system WebView; invite links carry the public SFU URL
+- Camera and microphone permissions are requested by the web client on pre-join
+- APK/AAB and iOS app bundles from the shared shell
+
+## 5. Desktop app (Tauri v2 — Windows / macOS)
 
 - Native window, GPU-accelerated WebView, perf browser flags
 - SFU address persisted in app config; hardware capability report
 - Invite links copy the public SFU URL, not the internal window URL
 - MSI / DMG bundles
 
-## 5. Server (no UI, but user-visible behavior)
+## 6. Server (no UI, but user-visible behavior)
 
 - mediasoup SFU — RTP forwarded, never transcoded
 - Ephemeral rooms (closed when last participant leaves)

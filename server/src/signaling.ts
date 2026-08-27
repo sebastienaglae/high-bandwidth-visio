@@ -1,4 +1,5 @@
 import type { WebSocket, RawData } from "ws";
+import { timingSafeEqual } from "node:crypto";
 import type { DtlsParameters } from "mediasoup/types";
 import type { ClientMessage, ServerResponse, TraceResult } from "@visio/shared";
 import {
@@ -11,6 +12,7 @@ import { newId } from "./ids.js";
 import { traceAndEnrich } from "./net/enrich.js";
 import { config } from "./config.js";
 import { validateWbOps } from "@visio/shared";
+import { randomSessionToken } from "./ids.js";
 import { findDisconnectedPeer } from "./rooms.js";
 
 interface Session {
@@ -73,6 +75,7 @@ async function handleMessage(
       respond(socket, requestId, {
         peerId: peer.id,
         roomId: room.id,
+        resumeToken: peer.resumeToken,
         role: room.roleOf(peer.id),
         locked: room.locked,
         hostPeerId: room.hostPeerId,
@@ -242,11 +245,18 @@ async function handleMessage(
       const found = findDisconnectedPeer(msg.peerId);
       if (!found) throw new Error("unknown session");
       const { peer, room } = found;
+      if (
+        typeof msg.resumeToken !== "string" ||
+        !timingSafeEqualJson(peer.resumeToken, msg.resumeToken)
+      ) {
+        throw new Error("unknown session");
+      }
       if (peer.disconnectTimer) {
         clearTimeout(peer.disconnectTimer);
         peer.disconnectTimer = undefined;
       }
       peer.disconnected = false;
+      peer.resumeToken = randomSessionToken();
       peer.socket = socket;
       bindRoom(peer, room);
       session.peer = peer;
@@ -255,6 +265,7 @@ async function handleMessage(
       respond(socket, requestId, {
         peerId: peer.id,
         roomId: room.id,
+        resumeToken: peer.resumeToken,
         role: room.roleOf(peer.id),
         locked: room.locked,
         hostPeerId: room.hostPeerId,
@@ -428,6 +439,7 @@ async function handleMessage(
     case "wbClear": {
       const peer = requirePeer(session);
       const room = requireRoom(peer);
+      if (room.hostPeerId !== peer.id) throw new Error("only the host can clear");
       room.wbOps = [];
       room.broadcast({ type: "wbOps", ops: [{ k: "clear" }] });
       respond(socket, requestId, {});
@@ -460,10 +472,8 @@ async function handleMessage(
 const IPV4_RE = /^(\d{1,3}(?:\.\d{1,3}){3})$/;
 
 function normalizeTarget(requested: string | undefined, clientIp: string): string {
-  const t = requested ?? clientIp;
-  // Only public IPv4 targets are traceable in this milestone; strip port from x-forwarded-for.
-  const bare = t.split(",")[0].trim().split(":")[0];
-  return IPV4_RE.test(bare) ? bare : clientIp.split(":").pop() ?? clientIp;
+  if (!IPV4_RE.test(clientIp)) throw new Error("invalid client address");
+  return clientIp;
 }
 
 async function runTrace(
@@ -490,6 +500,7 @@ function createPeer(
   const peer: Peer = {
     id: newId("peer"),
     displayName: String(displayName || "Guest").slice(0, 32),
+    resumeToken: randomSessionToken(),
     socket,
     transports: new Map(),
     producers: new Map(),
@@ -502,6 +513,13 @@ function createPeer(
   bindRoom(peer, room);
   session.peer = peer;
   return peer;
+}
+
+function timingSafeEqualJson(expected: string, provided: string): boolean {
+  const expectedBytes = Buffer.from(expected, "utf8");
+  const providedBytes = Buffer.from(provided, "utf8");
+  return expectedBytes.length === providedBytes.length &&
+    timingSafeEqual(expectedBytes, providedBytes);
 }
 
 const peerRooms = new WeakMap<Peer, Room>();

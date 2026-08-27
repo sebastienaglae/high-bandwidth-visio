@@ -1,9 +1,15 @@
+#[cfg(desktop)]
 use serde::Serialize;
+#[cfg(desktop)]
 use std::fs;
+#[cfg(desktop)]
 use std::path::PathBuf;
+#[cfg(desktop)]
 use sysinfo::System;
+#[cfg(desktop)]
 use tauri::Manager;
 
+#[cfg(desktop)]
 #[derive(Serialize)]
 struct HardwareInfo {
     os: String,
@@ -14,17 +20,20 @@ struct HardwareInfo {
     gpus: Vec<GpuInfo>,
 }
 
+#[cfg(desktop)]
 #[derive(Serialize)]
 struct GpuInfo {
     name: String,
     vram_mb: u64,
 }
 
+#[cfg(desktop)]
 fn config_path(app: &tauri::AppHandle) -> Option<PathBuf> {
     let dir = app.path().app_config_dir().ok()?;
     Some(dir.join("server.json"))
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn get_server_url(app: tauri::AppHandle) -> String {
     config_path(&app)
@@ -34,6 +43,7 @@ fn get_server_url(app: tauri::AppHandle) -> String {
         .unwrap_or_default()
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn set_server_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let url = url.trim().trim_end_matches('/').to_string();
@@ -47,8 +57,9 @@ fn set_server_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     fs::write(&path, serde_json::json!({ "url": url }).to_string()).map_err(|e| e.to_string())
 }
 
-/// Reports the machine's compute/encode capabilities. The native capture and
-/// hardware-encoder pipeline (Media Foundation / VideoToolbox) builds on this.
+/// Reports the machine's compute/encode capabilities on desktop; mobile uses
+/// the browser media stack directly.
+#[cfg(desktop)]
 #[tauri::command]
 fn hardware_info() -> HardwareInfo {
     use sysinfo::Disks;
@@ -77,6 +88,7 @@ fn hardware_info() -> HardwareInfo {
     }
 }
 
+#[cfg(desktop)]
 fn detect_gpus() -> Vec<GpuInfo> {
     #[cfg(target_os = "windows")]
     {
@@ -143,8 +155,11 @@ fn parse_mac_vram(s: &str) -> Option<u64> {
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            #[cfg(desktop)]
             get_server_url,
+            #[cfg(desktop)]
             set_server_url,
+            #[cfg(desktop)]
             hardware_info
         ])
         .run(tauri::generate_context!())
