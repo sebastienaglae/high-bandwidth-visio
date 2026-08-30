@@ -16,6 +16,9 @@ visio.example.com.  A  203.0.113.10
 ufw allow 80/tcp     # HTTP (Let's Encrypt challenge + redirect)
 ufw allow 443/tcp    # HTTPS
 ufw allow 40000:40100/udp   # WebRTC media
+ufw allow 3478/tcp          # TURN control/fallback
+ufw allow 3478/udp          # TURN control
+ufw allow 49152:49251/udp   # TURN relay allocations
 ```
 
 Never expose port 9090 publicly; it is only reachable inside the compose network.
@@ -28,7 +31,11 @@ cp .env.example .env
 # edit .env:
 #   ANNOUNCED_IP=<vps public ipv4>
 #   SITE_ADDRESS=visio.example.com
-docker compose up -d --build
+#   TURN_URLS=turn:<vps public ipv4>:3478?transport=udp,turn:<vps public ipv4>:3478?transport=tcp
+#   TURN_USERNAME=visio
+#   TURN_CREDENTIAL=<openssl rand -hex 32>
+docker compose --profile turn up -d --build --wait
+VISIO_BASE_URL=https://visio.example.com REQUIRE_TURN=1 npm run smoke:production
 ```
 
 Caddy obtains and renews TLS certificates automatically.
@@ -37,6 +44,9 @@ Caddy obtains and renews TLS certificates automatically.
 
 - `curl https://<domain>/api/new-room` → returns a room token
 - Open `https://<domain>` in a browser → create room → join from another device via link
+- Run `VISIO_BASE_URL=https://<domain> REQUIRE_TURN=1 npm run smoke:production`
+- Run `TURN_CREDENTIAL=<configured secret> npm run smoke:turn` on the Docker host to verify an authenticated allocation and relayed packets
+- Join once from a device on a different network (for example, mobile data) and verify audio/video in both directions
 - In-call: **Net** panel → Trace route should show the path through the VPS
 
 ## Notes
@@ -46,6 +56,7 @@ Caddy obtains and renews TLS certificates automatically.
 - Camera/mic require HTTPS (or localhost). That is why the domain + TLS matter.
 - Rooms are ephemeral: the last participant leaving closes the room.
 - Room links carry ~128 bits of entropy and are the sole access control.
+- TURN is a public-deployment launch gate, not an optional quality enhancement: without it, restrictive NAT combinations cannot connect.
 
 ## Production safeguards built in
 
@@ -55,12 +66,15 @@ Caddy obtains and renews TLS certificates automatically.
 - Speed test throttled to once / 30 s per IP, response capped at 256 MB.
 - Graceful shutdown on SIGTERM/SIGINT (drains WebSocket clients).
 - Security headers (nosniff, HSTS, frame-deny in production).
+- CSP and Permissions-Policy are applied by the bundled Caddy edge.
+- The server container runs compiled JavaScript as an unprivileged user.
 
 ## Updating
 
 ```bash
 git pull
-docker compose up -d --build
+docker compose --profile turn up -d --build --wait
+VISIO_BASE_URL=https://visio.example.com REQUIRE_TURN=1 npm run smoke:production
 ```
 
 ## Troubleshooting

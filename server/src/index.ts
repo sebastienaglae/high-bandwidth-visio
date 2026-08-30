@@ -1,4 +1,5 @@
 import http from "node:http";
+import net from "node:net";
 import { WebSocketServer, WebSocket } from "ws";
 import { config } from "./config.js";
 import { handleConnection } from "./signaling.js";
@@ -14,6 +15,15 @@ if (config.isProd && config.listenIp === "0.0.0.0" && !config.announcedIp) {
     "[visio] FATAL: production with LISTEN_IP=0.0.0.0 requires ANNOUNCED_IP " +
       "(the public IPv4 WebRTC clients must reach)."
   );
+  process.exit(1);
+}
+if (config.isProd && config.announcedIp && net.isIP(config.announcedIp) === 0) {
+  console.error("[visio] FATAL: ANNOUNCED_IP must be a valid IPv4 or IPv6 address.");
+  process.exit(1);
+}
+if (!Number.isInteger(config.rtcMinPort) || !Number.isInteger(config.rtcMaxPort) ||
+    config.rtcMinPort < 1024 || config.rtcMaxPort > 65535 || config.rtcMinPort > config.rtcMaxPort) {
+  console.error("[visio] FATAL: RTC_MIN_PORT/RTC_MAX_PORT must define a valid range within 1024-65535.");
   process.exit(1);
 }
 

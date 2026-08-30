@@ -81,6 +81,20 @@ const PATHS: Record<string, string> = {
   undo:
     '<path d="M3 7v6h6"/>' +
     '<path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>',
+  keyboard:
+    '<rect x="2" y="5" width="20" height="14" rx="2"/>' +
+    '<path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M8 16h8"/>',
+  more:
+    '<circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/>' +
+    '<circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>' +
+    '<circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/>',
+  "chevron-down": '<polyline points="6 9 12 15 18 9"/>',
+  brush: '<path d="m14.5 4.5 5 5"/><path d="M3 21c3.5 0 5.5-1.2 6-4.5L19.8 5.7a2.1 2.1 0 0 0-3-3L6 13.5C2.8 14 2 17.5 3 21Z"/>',
+  highlighter: '<path d="m9 11 4 4"/><path d="m3 21 3-6L16.6 4.4a2 2 0 0 1 2.8 0l.2.2a2 2 0 0 1 0 2.8L9 18l-6 3Z"/><path d="M14 21h7"/>',
+  eraser: '<path d="m7 21-4-4L15.5 4.5a2.1 2.1 0 0 1 3 0l1 1a2.1 2.1 0 0 1 0 3L7 21Z"/><path d="m11 9 5 5"/><path d="M7 21h12"/>',
+  line: '<path d="M4 20 20 4"/>',
+  rectangle: '<rect x="3" y="5" width="18" height="14" rx="1"/>',
+  ellipse: '<ellipse cx="12" cy="12" rx="9" ry="6.5"/>',
 };
 
 export function icon(name: keyof typeof PATHS | string, size = 18): SVGSVGElement {

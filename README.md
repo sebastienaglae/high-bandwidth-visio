@@ -23,21 +23,31 @@ like Nice–Osaka).
 - Adaptive jitter buffers, FEC and congestion control tuned per mode
 - Native desktop app for Windows & macOS ([Tauri v2](https://v2.tauri.app))
 
-## Screenshots
+## Screen gallery
 
-| | |
+| Home | First-run onboarding |
 |---|---|
-| ![Home](docs/screenshots/landing-light.png) | ![Live room](docs/screenshots/room.png) |
-| *Home — create or join with a link* | *Live room — two participants, chat, quality modes* |
-| ![Whiteboard](docs/screenshots/whiteboard.png) | ![Network diagnostics](docs/screenshots/network.png) |
-| *Collaborative whiteboard* | *Network panel — RTT, throughput, traceroute* |
-| ![Pre-join](docs/screenshots/prejoin.png) | ![Dark mode](docs/screenshots/landing-dark.png) |
-| *Pre-join device check* | *Dark theme* |
-| ![Speaker layout](docs/screenshots/layout-speaker.png) | |
-| *Speaker layout — pin a participant* | |
+| ![Create or join a private meeting](docs/screenshots/landing-light.png) | ![Three-step first-run onboarding](docs/screenshots/onboarding.png) |
+
+| Pre-join setup | Meeting room |
+|---|---|
+| ![Device, microphone level, and encryption setup](docs/screenshots/prejoin.png) | ![Live meeting with docked chat](docs/screenshots/room.png) |
+
+| Whiteboard | Network diagnostics |
+|---|---|
+| ![Collaborative drawing tools and canvas](docs/screenshots/whiteboard.png) | ![Live route, RTT, and media diagnostics](docs/screenshots/network.png) |
+
+| Speaker view | Dark theme |
+|---|---|
+| ![Pinned participant in speaker view](docs/screenshots/layout-speaker.png) | ![Home screen in dark theme](docs/screenshots/landing-dark.png) |
+
+| Mobile meeting | Reconnection state |
+|---|---|
+| ![Meeting controls on a mobile viewport](docs/screenshots/room-mobile.png) | ![Meeting while signaling reconnects](docs/screenshots/room-reconnecting.png) |
 
 See [FEATURES.md](docs/FEATURES.md) for a full page-by-page inventory, and
-[ROADMAP.md](docs/ROADMAP.md) for planned enhancements.
+[ROADMAP.md](docs/ROADMAP.md) for planned enhancements. Accessibility and
+operator responsibilities are documented in [COMPLIANCE.md](docs/COMPLIANCE.md).
 
 ## Structure
 
@@ -55,7 +65,7 @@ Requires Node 22+ and npm; the desktop app additionally needs Rust.
 
 ```bash
 npm install
-npm test              # 93 unit tests
+npm test              # 149 unit tests
 npm run typecheck     # strict TS across all workspaces
 
 npm run dev:server    # SFU + signaling on :9090
@@ -90,7 +100,7 @@ See [DEPLOY.md](DEPLOY.md). Short version:
 
 ```bash
 cp .env.example .env   # set ANNOUNCED_IP and SITE_ADDRESS
-docker compose up -d --build
+docker compose --profile turn up -d --build --wait
 ```
 
 Caddy obtains and renews TLS certificates automatically. Camera/microphone

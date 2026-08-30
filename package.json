@@ -20,9 +20,14 @@
     "mobile:ios:dev": "npm run ios:dev -w desktop",
     "mobile:ios:build": "npm run ios:build -w desktop",
     "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w web",
-    "test": "npm run test -w shared && npm run test -w server && npm run test -w web"
+    "test": "npm run test -w shared && npm run test -w server && npm run test -w web",
+    "qa:ui": "node scripts/ui-qa.mjs",
+    "qa:ui:cross-browser": "node scripts/ui-qa-cross.mjs",
+    "smoke:production": "node scripts/production-smoke.mjs",
+    "smoke:turn": "node scripts/turn-smoke.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "happy-dom": "^20.11.6",
     "playwright": "^1.62.1",
     "vitest": "^4.1.11"

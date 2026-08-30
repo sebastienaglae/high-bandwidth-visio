@@ -4,6 +4,8 @@ export interface WBStroke {
   id: string;
   color: string;
   width: number;
+  tool?: "pen" | "brush" | "highlighter" | "eraser" | "line" | "rectangle" | "ellipse";
+  opacity?: number;
 }
 
 export type WBOp =
@@ -36,7 +38,11 @@ export function validateWbOps(ops: unknown, maxOps = 32): WBOp[] | null {
       if (typeof width !== "number" || !(width >= 1 && width <= 40)) return null;
       const pts = sanitizePts(o.pts);
       if (!pts) return null;
-      out.push({ k: "start", s: { id: s.id, color: s.color, width }, pts });
+      const tool = s.tool;
+      if (tool !== undefined && !["pen", "brush", "highlighter", "eraser", "line", "rectangle", "ellipse"].includes(String(tool))) return null;
+      const opacity = s.opacity;
+      if (opacity !== undefined && (typeof opacity !== "number" || !Number.isFinite(opacity) || opacity < 0.1 || opacity > 1)) return null;
+      out.push({ k: "start", s: { id: s.id, color: s.color, width, ...(tool ? { tool: tool as WBStroke["tool"] } : {}), ...(opacity !== undefined ? { opacity } : {}) }, pts });
       continue;
     }
     if (o.k === "pts") {

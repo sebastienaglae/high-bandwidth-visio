@@ -15,8 +15,13 @@ services:
       LISTEN_IP: "0.0.0.0"
       # Public IPv4 of the VPS - advertised to WebRTC clients.
       ANNOUNCED_IP: ${ANNOUNCED_IP:?set ANNOUNCED_IP in .env}
+      TRUST_PROXY: "1"
       RTC_MIN_PORT: "40000"
       RTC_MAX_PORT: "40100"
+      ICE_SERVERS: ${ICE_SERVERS:-}
+      TURN_URLS: ${TURN_URLS:-}
+      TURN_USERNAME: ${TURN_USERNAME:-}
+      TURN_CREDENTIAL: ${TURN_CREDENTIAL:-}
     expose:
       - "9090"
     ports:
@@ -40,52 +45,71 @@ services:
         max-file: "3"
     environment:
       # e.g. visio.example.com for auto-TLS, or ":80" for plain HTTP testing.
-      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
     ports:
       - "80:80"
       - "443:443"
     depends_on:
-      - visio-server
+      visio-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # Optional TURN server for participants behind symmetric NATs.
   # Start with: docker compose --profile turn up -d
   # Then set in .env:
   #   TURN_URLS=turn:<vps-ip>:3478?transport=udp,turn:<vps-ip>:3478?transport=tcp
   #   TURN_USERNAME=visio
-  #   TURN_CREDENTIAL=<same static-auth-secret value>
+  #   TURN_CREDENTIAL=<generated password shared with the server config>
   coturn:
-    image: coturn/coturn:latest
+    image: coturn/coturn:latest@sha256:aa68aab64a3b929d57fc2924c98ea447bf996cf8dade2508e7b71eaf23f1f14e
     profiles: ["turn"]
     restart: unless-stopped
     network_mode: host
-    command: >
-      -n --realm=visio --fingerprint
-      --lt-cred-mech --static-auth-secret=${TURN_CREDENTIAL:-change-me}
-      --no-multicast-peers --no-cli
+    environment:
+      TURN_USERNAME: ${TURN_USERNAME:-visio}
+      TURN_CREDENTIAL: ${TURN_CREDENTIAL:-}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        test -n "$$TURN_CREDENTIAL" || { echo "TURN_CREDENTIAL is required" >&2; exit 64; }
+        exec turnserver -n --realm=visio --fingerprint --lt-cred-mech \
+          --user="$$TURN_USERNAME:$$TURN_CREDENTIAL" --min-port=49152 --max-port=49251 \
+          --no-multicast-peers --no-cli
 
   # Optional observability stack (Prometheus scrapes /metrics, Grafana plots it).
   # Start with: docker compose --profile observability up -d
-  # Grafana on :3000 (admin/admin), Prometheus on :9091.
+  # Grafana on localhost:3000 (admin / GRAFANA_PASSWORD), Prometheus on localhost:9091.
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:latest@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
     profiles: ["observability"]
     restart: unless-stopped
     volumes:
       - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9091:9090"
+      - "127.0.0.1:9091:9090"
     depends_on:
       - visio-server
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:latest@sha256:3fd54ae1214669f8355f065ec9f6445d5279a3d77095ab048ca045685272429b
     profiles: ["observability"]
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        test -n "$$GF_SECURITY_ADMIN_PASSWORD" || { echo "GRAFANA_PASSWORD is required" >&2; exit 64; }
+        exec /run.sh
     volumes:
       - ./ops/grafana-datasources.yml:/etc/grafana/provisioning/datasources/ds.yml:ro
       - ./ops/grafana-dashboard.json:/etc/grafana/provisioning/dashboards/visio.json:ro
       - ./ops/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"

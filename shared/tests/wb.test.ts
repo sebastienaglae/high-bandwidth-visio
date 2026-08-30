@@ -61,4 +61,11 @@ describe("validateWbOps", () => {
     expect(out).not.toBeNull();
     expect(JSON.stringify(out)).not.toContain("evil");
   });
+
+  it("accepts collaborative drawing tools and bounded opacity", () => {
+    const out = validateWbOps([{ k: "start", s: { ...goodStroke, tool: "highlighter", opacity: 0.32 }, pts: [0.1, 0.1] }]);
+    expect(out?.[0]).toMatchObject({ s: { tool: "highlighter", opacity: 0.32 } });
+    expect(validateWbOps([{ k: "start", s: { ...goodStroke, tool: "spray" }, pts: [0.1, 0.1] }])).toBeNull();
+    expect(validateWbOps([{ k: "start", s: { ...goodStroke, opacity: 0.01 }, pts: [0.1, 0.1] }])).toBeNull();
+  });
 });

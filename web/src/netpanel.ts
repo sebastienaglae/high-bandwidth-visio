@@ -14,6 +14,7 @@ export class NetPanel {
   private hopsBox!: HTMLDivElement;
   private pathSummary!: HTMLDivElement;
   private mediaStats!: HTMLDivElement;
+  private connectionSummary!: HTMLDivElement;
   private canvas!: HTMLCanvasElement;
   private clientIp = "…";
   private samples: Sample[] = [];
@@ -29,6 +30,8 @@ export class NetPanel {
   ) {
     this.root = document.createElement("aside");
     this.root.className = "net-panel";
+    this.root.setAttribute("aria-label", t("netTitle"));
+    this.root.addEventListener("keydown", (event) => trapFocus(event, this.root));
     this.render();
     this.clientIp = this.client.clientIp || "…";
     this.client.signal.onPush((push) => {
@@ -82,9 +85,27 @@ export class NetPanel {
     this.log.className = "net-log";
     this.mediaStats = document.createElement("div");
     this.mediaStats.className = "media-stats";
+    this.connectionSummary = document.createElement("div");
+    this.connectionSummary.className = "connection-summary checking";
+    this.connectionSummary.textContent = t("connectionChecking");
+
+    const closeBtn = button("×", () => this.close());
+    closeBtn.className = "panel-close";
+    closeBtn.setAttribute("aria-label", t("close"));
+    const title = document.createElement("div");
+    title.className = "panel-head";
+    const titleText = document.createElement("div");
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "eyebrow";
+    eyebrow.textContent = t("meeting");
+    const heading = document.createElement("h2");
+    heading.textContent = t("netTitle");
+    titleText.append(eyebrow, heading);
+    title.append(titleText, closeBtn);
 
     this.root.append(
-      header(t("netTitle")),
+      title,
+      this.connectionSummary,
       row(t("yourIp"), this.clientIp),
       this.canvas,
       this.mediaStats,
@@ -95,10 +116,6 @@ export class NetPanel {
       header(t("events")),
       this.log
     );
-
-    const x = button("×", () => this.close());
-    x.className = "panel-close";
-    this.root.querySelector(".panel-head")?.append(x);
   }
 
   private addLog(msg: string): void {
@@ -131,7 +148,7 @@ export class NetPanel {
     const avg = values.reduce((a, b) => a + b, 0) / values.length;
     ctx.fillStyle = "#9aa0a8";
     ctx.font = "10px sans-serif";
-    ctx.fillText(`${last.toFixed(0)}ms now · ${avg.toFixed(0)}ms avg`, 4, 12);
+    ctx.fillText(`${last.toFixed(0)}ms ${t("now")} · ${avg.toFixed(0)}ms ${t("average")}`, 4, 12);
   }
 
   private renderHops(result: TraceResult): void {
@@ -148,7 +165,7 @@ export class NetPanel {
       const last = [...data.hops].reverse().find((h) => h.ip);
       this.addLog(
         `${t("traceComplete")}: ${data.hops.length} ${t("hops")}` +
-          (last?.org ? `, via ${last.org}` : "")
+          (last?.org ? `, ${t("via")} ${last.org}` : "")
       );
     } catch (e) {
       this.addLog(`${t("traceFailed")}: ${(e as Error).message}`);
@@ -186,7 +203,7 @@ export class NetPanel {
       const mbps = (received * 8) / seconds / 1e6;
       this.addLog(`${t("downlink")}: ${mbps.toFixed(0)} Mbps (${(received / 1e6).toFixed(0)} MB in ${seconds.toFixed(1)}s)`);
     } catch (e) {
-      this.addLog(`Speed test failed: ${(e as Error).message}`);
+      this.addLog(`${t("speedTestFailed")}: ${(e as Error).message}`);
     }
     btn.disabled = false;
     btn.textContent = t("speedTest");
@@ -267,6 +284,11 @@ export class NetPanel {
       this.mediaStats.dataset.rtt = rttMs === null ? "–" : `${(rttMs as number).toFixed(0)} ms`;
       this.mediaStats.dataset.jitter = jitterN ? `${((jitterSum / jitterN) * 1000).toFixed(1)} ms` : "–";
       this.mediaStats.dataset.lost = String(lost);
+      const quality = rttMs === null ? "checking" : lost > 20 || rttMs > 300 ? "poor" : lost > 5 || rttMs > 150 ? "unstable" : "good";
+      this.connectionSummary.className = `connection-summary ${quality}`;
+      this.connectionSummary.textContent = t(
+        quality === "poor" ? "connectionPoor" : quality === "unstable" ? "connectionUnstable" : quality === "good" ? "connectionGood" : "connectionChecking"
+      );
       this.renderMediaStatsLine();
     } catch {
       /* transports not ready */
@@ -276,11 +298,11 @@ export class NetPanel {
   private renderMediaStatsLine(): void {
     const d = this.mediaStats.dataset;
     this.mediaStats.replaceChildren(
-      stat(`↑ ${d.up ?? "–"}`),
-      stat(`↓ ${d.down ?? "–"}`),
-      stat(`RTT ${d.rtt ?? "–"}`),
-      stat(`Jitter ${d.jitter ?? "–"}`),
-      stat(`Lost ${d.lost ?? "–"}`)
+      stat(`${t("uplink")} ${d.up ?? "–"}`),
+      stat(`${t("downlink")} ${d.down ?? "–"}`),
+      stat(`${t("rtt")} ${d.rtt ?? "–"}`),
+      stat(`${t("jitter")} ${d.jitter ?? "–"}`),
+      stat(`${t("lostPackets")} ${d.lost ?? "–"}`)
     );
   }
 }
@@ -303,9 +325,9 @@ function rowButtons(...btns: HTMLButtonElement[]): HTMLDivElement {
 }
 
 function header(text: string): HTMLElement {
-  const h = document.createElement("div");
-  h.className = "panel-head";
-  h.append(Object.assign(document.createElement("span"), { textContent: text }));
+  const h = document.createElement("h3");
+  h.className = "panel-section-title";
+  h.textContent = text;
   return h;
 }
 
@@ -324,6 +346,22 @@ function stat(text: string): HTMLSpanElement {
   s.className = "stat-chip";
   s.textContent = text;
   return s;
+}
+
+function trapFocus(event: KeyboardEvent, root: HTMLElement): void {
+  if (event.key !== "Tab") return;
+  const focusable = [...root.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex='-1'])")]
+    .filter((node) => node.getClientRects().length > 0);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1)!;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 export function hopRow(hop: HopInfo): HTMLDivElement {

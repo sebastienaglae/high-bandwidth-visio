@@ -1,0 +1,17 @@
+{
+  "name": "Visio",
+  "short_name": "Visio",
+  "description": "Private high-bandwidth video meetings with minimal relay latency.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f2ec",
+  "theme_color": "#1b1814",
+  "icons": [
+    {
+      "src": "/visio-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -15,9 +15,22 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm audit --omit=dev
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build -w server
       - run: npm run build -w web
+      - name: Install browsers for UI QA
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Run responsive UI QA
+        run: npm run qa:ui:cross-browser
+      - name: Upload UI QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-qa-screenshots
+          path: docs/screenshots/qa
+          if-no-files-found: ignore
 
   docker:
     runs-on: ubuntu-latest
@@ -31,9 +44,47 @@ jobs:
           context: .
           file: server/Dockerfile
           push: false
+          cache-from: type=gha,scope=visio-server
+          cache-to: type=gha,mode=max,scope=visio-server
       - name: Build web image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: web/Dockerfile
           push: false
+          cache-from: type=gha,scope=visio-web
+          cache-to: type=gha,mode=max,scope=visio-web
+      - name: Exercise production compose stack
+        env:
+          ANNOUNCED_IP: 127.0.0.1
+          SITE_ADDRESS: ":80"
+          TURN_URLS: turn:127.0.0.1:3478?transport=udp,turn:127.0.0.1:3478?transport=tcp
+          TURN_USERNAME: visio
+          TURN_CREDENTIAL: ci-turn-smoke-credential
+          REQUIRE_TURN: "1"
+        run: |
+          docker compose --profile turn up -d --build --wait
+          npm run smoke:production
+          npm run smoke:turn
+      - name: Scan server image for high and critical CVEs
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: visio-visio-server:latest
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+      - name: Scan web image for high and critical CVEs
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: visio-visio-web:latest
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+      - name: Collect production logs
+        if: failure()
+        run: docker compose --profile turn logs --no-color
+      - name: Stop production stack
+        if: always()
+        run: docker compose --profile turn down --volumes
