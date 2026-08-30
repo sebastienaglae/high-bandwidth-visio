@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@visio/shared": "*",
-    "mediasoup-client": "^3.7.0"
+    "mediasoup-client": "^3.23.1"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
