@@ -28,9 +28,9 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "happy-dom": "^20.11.6",
-    "playwright": "^1.62.1",
-    "vitest": "^4.1.11"
+    "happy-dom": "^20.14.3",
+    "playwright": "^1.63.0",
+    "vitest": "^5.0.0"
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
