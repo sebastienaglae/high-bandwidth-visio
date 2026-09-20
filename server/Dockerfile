@@ -1,5 +1,5 @@
 # ---- Build ----
-FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS build
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS build
 
 # Toolchain only needed if the mediasoup-worker prebuilt binary is unavailable;
 # keeps the image self-sufficient either way.
@@ -25,7 +25,7 @@ RUN npm run build -w server \
  && npm prune --omit=dev
 
 # ---- Minimal production runtime ----
-FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS runtime
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS runtime
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates traceroute mtr-tiny \
