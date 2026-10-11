@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@visio/shared": "*",
-    "mediasoup": "^3.14.0",
+    "mediasoup": "^3.28.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
